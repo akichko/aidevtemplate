@@ -73,7 +73,7 @@
       const options = accounts.map((account) => `<option value="${account}">${account}</option>`).join("");
       row.innerHTML = `<span class="row-index" aria-hidden="true">${list.children.length + 1}</span>
         <select class="control account-select" aria-label="${sideLabel}勘定科目" required><option value="">勘定科目を選択</option>${options}</select>
-        <div class="amount-wrap"><input class="control amount-input" type="number" min="1" step="1" inputmode="numeric" placeholder="金額" aria-label="金額" required><span class="currency">円</span></div>
+        <div class="amount-wrap"><input class="control amount-input" type="text" inputmode="numeric" pattern="[1-9][0-9]*" placeholder="金額" aria-label="金額" required><span class="currency">円</span></div>
         <button class="remove-row" type="button" aria-label="${sideLabel}明細を削除" title="明細を削除">×</button>`;
       list.append(row);
       row.querySelector(".amount-input").addEventListener("input", updateBalance);
