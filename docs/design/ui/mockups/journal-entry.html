@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>仕訳登録 | 帳務</title>
+  <link rel="stylesheet" href="mockup.css">
+</head>
+<body>
+  <main class="mock-page">
+    <div class="mock-page-inner">
+      <div class="breadcrumb"><span>会計</span><span aria-hidden="true">/</span><strong>仕訳登録</strong></div>
+      <div class="page-heading">
+        <div><p class="eyebrow">DAILY BOOKKEEPING</p><h1>仕訳登録</h1><p class="subtitle">取引を借方・貸方に分けて記録します。</p></div>
+        <span class="panel-note">入力内容はこのブラウザー内のデモです</span>
+      </div>
+
+      <form class="panel form-panel" id="journal-form">
+        <div class="form-top">
+          <div class="field"><label for="entry-date">取引日</label><input class="control" id="entry-date" type="date" required></div>
+          <div class="field"><label for="entry-description">摘要</label><input class="control" id="entry-description" type="text" placeholder="例: 消耗品を購入" maxlength="100" required></div>
+        </div>
+
+        <section class="entry-section debit" aria-labelledby="debit-heading">
+          <div class="entry-section-heading"><h2 id="debit-heading"><span class="section-mark" aria-hidden="true"></span>借方</h2><span>借方合計 <strong id="debit-total-label">0</strong> 円</span></div>
+          <div class="entry-rows" id="debit-rows"></div>
+          <button class="button subtle add-row" type="button" data-add="debit">＋ 借方明細を追加</button>
+        </section>
+
+        <section class="entry-section credit" aria-labelledby="credit-heading">
+          <div class="entry-section-heading"><h2 id="credit-heading"><span class="section-mark" aria-hidden="true"></span>貸方</h2><span>貸方合計 <strong id="credit-total-label">0</strong> 円</span></div>
+          <div class="entry-rows" id="credit-rows"></div>
+          <button class="button subtle add-row" type="button" data-add="credit">＋ 貸方明細を追加</button>
+        </section>
+
+        <div class="balance-strip" aria-live="polite">
+          <div class="balance-item"><span class="balance-label">借方合計</span><strong class="balance-value" id="debit-total">¥0</strong></div>
+          <div class="balance-item"><span class="balance-label">貸方合計</span><strong class="balance-value" id="credit-total">¥0</strong></div>
+          <div class="balance-status" id="balance-status">金額を入力</div>
+        </div>
+        <div class="form-footer">
+          <span class="inline-error" id="journal-error" role="alert"></span>
+          <button class="button secondary" type="reset">入力をクリア</button>
+          <button class="button" id="submit-journal" type="submit" disabled>仕訳を登録</button>
+        </div>
+      </form>
+
+      <section class="panel recent-panel" aria-labelledby="recent-title">
+        <div class="panel-head"><h2 class="panel-title" id="recent-title">この画面で登録した仕訳</h2><span class="panel-note">デモ中のみ表示</span></div>
+        <div class="table-scroll"><table>
+          <thead><tr><th>取引日</th><th>摘要</th><th class="right">借方合計</th><th class="right">貸方合計</th></tr></thead>
+          <tbody id="journal-list"><tr><td class="empty-row" colspan="4">登録した仕訳はありません</td></tr></tbody>
+        </table></div>
+      </section>
+    </div>
+  </main>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    const accounts = ["現金", "普通預金", "売掛金", "備品", "買掛金", "借入金", "資本金", "売上高", "仕入高", "給与手当", "地代家賃", "通信費", "受取手数料"];
+    const money = new Intl.NumberFormat("ja-JP");
+    const form = document.querySelector("#journal-form");
+    const submitButton = document.querySelector("#submit-journal");
+    const balanceStatus = document.querySelector("#balance-status");
+    const error = document.querySelector("#journal-error");
+    let toastTimer;
+
+    function addEntryRow(side) {
+      const list = document.querySelector(`#${side}-rows`);
+      const row = document.createElement("div");
+      row.className = "entry-row";
+      const sideLabel = side === "debit" ? "借方" : "貸方";
+      const options = accounts.map((account) => `<option value="${account}">${account}</option>`).join("");
+      row.innerHTML = `<span class="row-index" aria-hidden="true">${list.children.length + 1}</span>
+        <select class="control account-select" aria-label="${sideLabel}勘定科目" required><option value="">勘定科目を選択</option>${options}</select>
+        <div class="amount-wrap"><input class="control amount-input" type="number" min="1" step="1" inputmode="numeric" placeholder="金額" aria-label="金額" required><span class="currency">円</span></div>
+        <button class="remove-row" type="button" aria-label="${sideLabel}明細を削除" title="明細を削除">×</button>`;
+      list.append(row);
+      row.querySelector(".amount-input").addEventListener("input", updateBalance);
+      row.querySelector(".remove-row").addEventListener("click", () => {
+        if (list.children.length === 1) {
+          row.querySelector(".account-select").value = "";
+          row.querySelector(".amount-input").value = "";
+        } else {
+          row.remove();
+        }
+        renumberRows(list);
+        updateBalance();
+      });
+      updateBalance();
+    }
+
+    function renumberRows(list) {
+      [...list.children].forEach((row, index) => row.querySelector(".row-index").textContent = String(index + 1));
+    }
+
+    function totalFor(side) {
+      return [...document.querySelectorAll(`#${side}-rows .amount-input`)].reduce((sum, input) => sum + (Number(input.value) || 0), 0);
+    }
+
+    function updateBalance() {
+      const debit = totalFor("debit");
+      const credit = totalFor("credit");
+      const balanced = debit > 0 && debit === credit;
+      const anyAmount = debit > 0 || credit > 0;
+      document.querySelector("#debit-total").textContent = `¥${money.format(debit)}`;
+      document.querySelector("#credit-total").textContent = `¥${money.format(credit)}`;
+      document.querySelector("#debit-total-label").textContent = money.format(debit);
+      document.querySelector("#credit-total-label").textContent = money.format(credit);
+      balanceStatus.textContent = balanced ? "貸借一致" : anyAmount ? "金額が不一致" : "金額を入力";
+      balanceStatus.className = `balance-status${balanced ? " is-balanced" : anyAmount ? " is-unbalanced" : ""}`;
+      submitButton.disabled = !balanced;
+    }
+
+    function showToast(message) {
+      const toast = document.querySelector("#toast");
+      toast.textContent = message;
+      toast.classList.add("show");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove("show"), 2800);
+    }
+
+    document.querySelectorAll("[data-add]").forEach((button) => button.addEventListener("click", () => addEntryRow(button.dataset.add)));
+    form.addEventListener("input", () => error.classList.remove("visible"));
+    form.addEventListener("reset", () => setTimeout(() => {
+      document.querySelectorAll(".account-select").forEach((select) => select.value = "");
+      error.classList.remove("visible");
+      updateBalance();
+    }, 0));
+
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      if (!form.reportValidity()) return;
+      const debit = totalFor("debit");
+      const credit = totalFor("credit");
+      if (debit === 0 || debit !== credit) {
+        error.textContent = "借方合計と貸方合計を一致させてください。";
+        error.classList.add("visible");
+        return;
+      }
+      const date = document.querySelector("#entry-date").value.replaceAll("-", "/");
+      const description = document.querySelector("#entry-description").value.trim();
+      const body = document.querySelector("#journal-list");
+      if (body.querySelector(".empty-row")) body.innerHTML = "";
+      const row = document.createElement("tr");
+      row.innerHTML = `<td>${date}</td><td></td><td class="right">${money.format(debit)}</td><td class="right">${money.format(credit)}</td>`;
+      row.children[1].textContent = description;
+      body.prepend(row);
+      form.reset();
+      showToast("仕訳を登録しました（この画面内のみ）。");
+    });
+
+    const today = new Date();
+    document.querySelector("#entry-date").value = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, "0"), String(today.getDate()).padStart(2, "0")].join("-");
+    addEntryRow("debit");
+    addEntryRow("credit");
+  </script>
+</body>
+</html>

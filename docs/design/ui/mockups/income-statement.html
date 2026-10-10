@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>損益計算書 | 帳務</title>
+  <link rel="stylesheet" href="mockup.css">
+</head>
+<body>
+  <main class="mock-page">
+    <div class="mock-page-inner">
+      <div class="breadcrumb"><span>会計</span><span aria-hidden="true">/</span><strong>損益計算書</strong></div>
+      <div class="page-heading"><div><p class="eyebrow">PROFIT &amp; LOSS</p><h1>損益計算書</h1><p class="subtitle">指定した期間の収益・費用と利益を表示します。</p></div></div>
+      <div class="panel form-panel" style="margin-bottom:17px">
+        <div class="report-tools">
+          <div class="field range"><label for="income-start">期間</label><input class="control" id="income-start" type="date" value="2026-04-01"></div>
+          <span class="muted" style="padding-bottom:11px">から</span>
+          <div class="field range"><label class="sr-only" for="income-end">終了日</label><input class="control" id="income-end" type="date" value="2027-03-31"></div>
+          <button class="button" id="show-report" type="button">表示</button>
+          <span class="panel-note">単位: 円</span>
+        </div>
+      </div>
+      <div class="report-summary">
+        <article class="summary-card"><div class="summary-card-label">収益合計</div><div class="summary-card-value">5,280,000<small>円</small></div></article>
+        <article class="summary-card"><div class="summary-card-label">費用合計</div><div class="summary-card-value">3,410,000<small>円</small></div></article>
+        <article class="summary-card"><div class="summary-card-label">当期純利益</div><div class="summary-card-value">1,870,000<small>円</small></div></article>
+      </div>
+      <div class="statement-grid">
+        <article class="panel statement-card">
+          <div class="panel-head"><h2 class="panel-title">収益</h2><span class="panel-note">対象期間の収益</span></div>
+          <div class="statement-section">
+            <div class="statement-row"><span>売上高</span><span class="amount">5,200,000</span></div>
+            <div class="statement-row"><span>受取手数料</span><span class="amount">80,000</span></div>
+            <div class="statement-row total"><span>収益合計</span><span class="amount">5,280,000</span></div>
+          </div>
+          <div class="statement-foot"><span>収益合計</span><span>5,280,000 円</span></div>
+        </article>
+        <article class="panel statement-card">
+          <div class="panel-head"><h2 class="panel-title">費用</h2><span class="panel-note">対象期間の費用</span></div>
+          <div class="statement-section">
+            <div class="statement-row"><span>仕入高</span><span class="amount">1,780,000</span></div>
+            <div class="statement-row"><span>給与手当</span><span class="amount">1,120,000</span></div>
+            <div class="statement-row"><span>地代家賃</span><span class="amount">360,000</span></div>
+            <div class="statement-row"><span>通信費・その他</span><span class="amount">150,000</span></div>
+            <div class="statement-row total"><span>費用合計</span><span class="amount">3,410,000</span></div>
+          </div>
+          <div class="statement-foot"><span>当期純利益</span><span>1,870,000 円</span></div>
+        </article>
+      </div>
+      <p class="report-footnote">表示内容は画面確認用のサンプルデータです。</p>
+    </div>
+  </main>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script>
+    document.querySelector("#show-report").addEventListener("click", () => {
+      const start = document.querySelector("#income-start").value;
+      const end = document.querySelector("#income-end").value;
+      const toast = document.querySelector("#toast");
+      toast.textContent = start && end && start <= end ? "サンプルデータを表示しています。" : "有効な期間を入力してください。";
+      toast.classList.add("show");
+      setTimeout(() => toast.classList.remove("show"), 2600);
+    });
+  </script>
+</body>
+</html>

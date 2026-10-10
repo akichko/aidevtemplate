@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#173b32">
+  <title>帳務 | 会計ワークスペース</title>
+  <link rel="stylesheet" href="mockup.css">
+</head>
+<body>
+  <header class="shell-topbar">
+    <div class="brand-wrap">
+      <div class="brand-mark" aria-hidden="true">帳</div>
+      <div><div class="brand">帳務</div><div class="brand-caption">ACCOUNTING WORKSPACE</div></div>
+    </div>
+    <div class="top-context"><span>会計ワークスペース</span><span class="context-divider" aria-hidden="true"></span><span>デモデータ</span></div>
+    <div class="top-actions">
+      <label class="sr-only" for="fiscal-year">会計年度</label>
+      <select class="fiscal-select" id="fiscal-year" aria-label="会計年度"><option>2026年度</option><option>2025年度</option></select>
+      <div class="avatar" aria-label="利用者">山田</div>
+    </div>
+  </header>
+
+  <div class="shell-workspace">
+    <aside class="sidebar" aria-label="メインメニュー">
+      <p class="side-label">会計</p>
+      <nav class="nav-list" aria-label="画面">
+        <button class="nav-item" type="button" data-file="journal-entry.html" data-title="仕訳登録" aria-current="page"><span class="nav-glyph" aria-hidden="true">＋</span>仕訳登録</button>
+        <button class="nav-item" type="button" data-file="balance-sheet.html" data-title="貸借対照表"><span class="nav-glyph" aria-hidden="true">▤</span>貸借対照表</button>
+        <button class="nav-item" type="button" data-file="income-statement.html" data-title="損益計算書"><span class="nav-glyph" aria-hidden="true">▥</span>損益計算書</button>
+      </nav>
+      <div class="side-spacer"></div>
+      <div class="workspace-card">
+        <div class="workspace-card-label">現在の帳簿</div>
+        <div class="workspace-name">青葉デザイン事務所</div>
+        <div class="workspace-state"><span class="state-dot" aria-hidden="true"></span>2026年度 会計期間</div>
+      </div>
+    </aside>
+    <main class="frame-region">
+      <iframe class="content-frame" id="content-frame" src="journal-entry.html" title="仕訳登録"></iframe>
+    </main>
+  </div>
+
+  <script>
+    const contentFrame = document.querySelector("#content-frame");
+    document.querySelectorAll(".nav-item").forEach((button) => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll(".nav-item").forEach((item) => item.removeAttribute("aria-current"));
+        button.setAttribute("aria-current", "page");
+        contentFrame.src = button.dataset.file;
+        contentFrame.title = button.dataset.title;
+      });
+    });
+  </script>
+</body>
+</html>
