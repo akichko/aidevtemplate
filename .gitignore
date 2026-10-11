@@ -1,2 +1,7 @@
 infra/.env
+.env
 ChangeRequests/**/*.md
+node_modules/
+dist/
+src/api/data/*.sqlite
+src/api/data/*.sqlite-*

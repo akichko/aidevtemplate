@@ -1,10 +1,16 @@
-# Traceability Matrix
+# トレーサビリティマトリクス
 
-| Requirement | Use Case | Architecture | Design | Source | Unit Test | Integration Test | Status |
+| 要件 | ユースケース | アーキテクチャ | 設計 | 実装 | 単体テスト | 結合テスト | 状態 |
 |---|---|---|---|---|---|---|---|
-| REQ-F-001 | UC-001 | ARC-001 | DES-APP-001 | TODO | UT-001 | IT-001 | TODO |
+| REQ-F-001 | UC-001 | ARC-001 | DES-DOM-001、DES-APP-001、DATA-001 | 未着手 | 未着手 | 未着手 | 設計反映済 |
+| REQ-F-002 | UC-002 | ARC-001 | DATA-001 | 未着手 | 未着手 | 未着手 | 既存要件 |
+| REQ-F-003 | UC-002 | ARC-001 | DATA-001 | 未着手 | 未着手 | 未着手 | 既存要件 |
+| REQ-F-004 | UC-002、UC-003 | ARC-001 | DES-DOM-001、DES-APP-002、DATA-001、SCR-004 | 未着手 | 未着手 | 未着手 | 設計反映済 |
+| REQ-F-005 | UC-001、UC-003 | ARC-001 | DES-DOM-001、DES-APP-002、DATA-001、SCR-004 | 未着手 | 未着手 | 未着手 | 設計反映済 |
+| REQ-F-006 | UC-003 | ARC-001 | DES-APP-002、SCR-004、DES-DOM-001、DATA-001 | 未着手 | 未着手 | 未着手 | 設計反映済 |
+| REQ-F-007 | UC-003 | ARC-001 | DES-APP-002、SCR-004、DES-DOM-001、DATA-001 | 未着手 | 未着手 | 未着手 | 設計反映済 |
 
-## Checks
+## 確認項目
 - 未対応要件
 - 孤立した設計
 - 孤立したテスト

@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>勘定科目マスタ | 帳務</title>
+  <link rel="stylesheet" href="mockup.css">
+</head>
+<body>
+  <main class="mock-page">
+    <div class="mock-page-inner">
+      <div class="breadcrumb"><span>設定</span><span aria-hidden="true">/</span><strong>勘定科目マスタ</strong></div>
+      <div class="page-heading">
+        <div><p class="eyebrow">ACCOUNT SETTINGS</p><h1>勘定科目マスタ</h1><p class="subtitle">勘定科目と、勘定科目ごとの補助科目を管理します。</p></div>
+        <span class="panel-note">登録内容はこのブラウザー内のデモです</span>
+      </div>
+
+      <div class="master-layout">
+        <section class="panel master-list-panel" aria-labelledby="account-list-heading">
+          <div class="panel-head master-list-head">
+            <h2 class="panel-title" id="account-list-heading">勘定科目一覧</h2>
+            <button class="button subtle" id="new-account" type="button">＋ 新規</button>
+          </div>
+          <div class="master-filter">
+            <label class="sr-only" for="category-filter">勘定科目区分で絞り込み</label>
+            <select class="control" id="category-filter">
+              <option value="">すべての区分</option>
+              <option>資産</option><option>負債</option><option>純資産</option><option>利益</option><option>損失</option>
+            </select>
+          </div>
+          <div class="table-scroll"><table class="master-table">
+            <thead><tr><th>勘定科目名</th><th>区分</th><th class="right">補助科目</th></tr></thead>
+            <tbody id="account-list"><tr><td class="empty-row" colspan="3">勘定科目はありません</td></tr></tbody>
+          </table></div>
+        </section>
+
+        <div class="master-detail">
+          <section class="panel master-editor-panel" aria-labelledby="account-editor-heading">
+            <div class="panel-head"><h2 class="panel-title" id="account-editor-heading">勘定科目を登録</h2></div>
+            <form class="master-form" id="account-form">
+              <div class="master-fields">
+                <div class="field"><label for="account-name">勘定科目名</label><input class="control" id="account-name" type="text" required></div>
+                <div class="field"><label for="account-category">勘定科目区分</label><select class="control" id="account-category" required><option value="">区分を選択</option><option>資産</option><option>負債</option><option>純資産</option><option>利益</option><option>損失</option></select></div>
+              </div>
+              <div class="form-footer"><button class="button secondary" id="cancel-account" type="button">クリア</button><button class="button" id="save-account" type="submit">勘定科目を登録</button></div>
+            </form>
+          </section>
+
+          <section class="panel subaccount-panel" aria-labelledby="subaccount-heading">
+            <div class="panel-head"><div><h2 class="panel-title" id="subaccount-heading">補助科目</h2><p class="panel-note" id="selected-account-label">勘定科目を選択してください</p></div></div>
+            <form class="subaccount-form" id="subaccount-form">
+              <div class="field"><label for="subaccount-name">補助科目名</label><input class="control" id="subaccount-name" type="text" required disabled></div>
+              <button class="button subtle" id="save-subaccount" type="submit" disabled>補助科目を追加</button>
+            </form>
+            <div class="table-scroll"><table class="master-table">
+              <thead><tr><th>補助科目名</th><th class="right">操作</th></tr></thead>
+              <tbody id="subaccount-list"><tr><td class="empty-row" colspan="2">勘定科目を選択してください</td></tr></tbody>
+            </table></div>
+          </section>
+        </div>
+      </div>
+    </div>
+  </main>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    const categories = ["資産", "負債", "純資産", "利益", "損失"];
+    const accounts = [];
+    const accountForm = document.querySelector("#account-form");
+    const accountName = document.querySelector("#account-name");
+    const accountCategory = document.querySelector("#account-category");
+    const accountList = document.querySelector("#account-list");
+    const subaccountForm = document.querySelector("#subaccount-form");
+    const subaccountName = document.querySelector("#subaccount-name");
+    const subaccountList = document.querySelector("#subaccount-list");
+    const saveSubaccount = document.querySelector("#save-subaccount");
+    const selectedAccountLabel = document.querySelector("#selected-account-label");
+    const toast = document.querySelector("#toast");
+    let selectedAccountId = null;
+    let selectedSubaccountId = null;
+    let nextAccountId = 1;
+    let nextSubaccountId = 1;
+    let toastTimer;
+
+    function showToast(message) {
+      toast.textContent = message;
+      toast.classList.add("show");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove("show"), 2400);
+    }
+
+    function selectedAccount() {
+      return accounts.find((account) => account.id === selectedAccountId) ?? null;
+    }
+
+    function addCell(row, text, className = "") {
+      const cell = document.createElement("td");
+      cell.textContent = text;
+      if (className) cell.className = className;
+      row.append(cell);
+      return cell;
+    }
+
+    function renderAccounts() {
+      const filter = document.querySelector("#category-filter").value;
+      const filteredAccounts = accounts.filter((account) => !filter || account.category === filter);
+      accountList.replaceChildren();
+      if (filteredAccounts.length === 0) {
+        const row = document.createElement("tr");
+        const cell = addCell(row, accounts.length === 0 ? "勘定科目はありません" : "該当する勘定科目はありません", "empty-row");
+        cell.colSpan = 3;
+        accountList.append(row);
+        return;
+      }
+      filteredAccounts.forEach((account) => {
+        const row = document.createElement("tr");
+        row.setAttribute("aria-selected", String(account.id === selectedAccountId));
+        const nameCell = document.createElement("td");
+        const selectButton = document.createElement("button");
+        selectButton.className = "master-select";
+        selectButton.type = "button";
+        selectButton.textContent = account.name;
+        selectButton.addEventListener("click", () => selectAccount(account.id));
+        nameCell.append(selectButton);
+        row.append(nameCell);
+        addCell(row, account.category);
+        addCell(row, String(account.subaccounts.length), "right");
+        accountList.append(row);
+      });
+    }
+
+    function renderSubaccounts() {
+      const account = selectedAccount();
+      subaccountList.replaceChildren();
+      if (!account || account.subaccounts.length === 0) {
+        const row = document.createElement("tr");
+        const cell = addCell(row, account ? "補助科目はありません" : "勘定科目を選択してください", "empty-row");
+        cell.colSpan = 2;
+        subaccountList.append(row);
+        return;
+      }
+      account.subaccounts.forEach((subaccount) => {
+        const row = document.createElement("tr");
+        addCell(row, subaccount.name);
+        const actionCell = document.createElement("td");
+        actionCell.className = "right";
+        const editButton = document.createElement("button");
+        editButton.className = "text-button";
+        editButton.type = "button";
+        editButton.textContent = "変更";
+        editButton.addEventListener("click", () => {
+          selectedSubaccountId = subaccount.id;
+          subaccountName.value = subaccount.name;
+          saveSubaccount.textContent = "変更を保存";
+          subaccountName.focus();
+        });
+        actionCell.append(editButton);
+        row.append(actionCell);
+        subaccountList.append(row);
+      });
+    }
+
+    function selectAccount(id) {
+      const account = accounts.find((item) => item.id === id);
+      if (!account) return;
+      selectedAccountId = id;
+      selectedSubaccountId = null;
+      accountName.value = account.name;
+      accountCategory.value = account.category;
+      document.querySelector("#account-editor-heading").textContent = "勘定科目を変更";
+      document.querySelector("#save-account").textContent = "変更を保存";
+      selectedAccountLabel.textContent = account.name;
+      subaccountName.disabled = false;
+      saveSubaccount.disabled = false;
+      subaccountName.value = "";
+      saveSubaccount.textContent = "補助科目を追加";
+      renderAccounts();
+      renderSubaccounts();
+    }
+
+    function clearAccountForm() {
+      selectedAccountId = null;
+      selectedSubaccountId = null;
+      accountForm.reset();
+      subaccountForm.reset();
+      subaccountName.disabled = true;
+      saveSubaccount.disabled = true;
+      saveSubaccount.textContent = "補助科目を追加";
+      selectedAccountLabel.textContent = "勘定科目を選択してください";
+      document.querySelector("#account-editor-heading").textContent = "勘定科目を登録";
+      document.querySelector("#save-account").textContent = "勘定科目を登録";
+      renderAccounts();
+      renderSubaccounts();
+    }
+
+    document.querySelector("#category-filter").addEventListener("change", renderAccounts);
+    document.querySelector("#new-account").addEventListener("click", () => {
+      clearAccountForm();
+      accountName.focus();
+    });
+    document.querySelector("#cancel-account").addEventListener("click", clearAccountForm);
+
+    accountForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const name = accountName.value.trim();
+      const category = accountCategory.value;
+      if (!name || !categories.includes(category)) return;
+      let account = selectedAccount();
+      const isNew = !account;
+      if (isNew) {
+        account = { id: nextAccountId++, name, category, subaccounts: [] };
+        accounts.push(account);
+      } else {
+        account.name = name;
+        account.category = category;
+      }
+      selectAccount(account.id);
+      showToast(isNew ? "勘定科目を登録しました" : "勘定科目を変更しました");
+    });
+
+    subaccountForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const account = selectedAccount();
+      const name = subaccountName.value.trim();
+      if (!account || !name) return;
+      const subaccount = account.subaccounts.find((item) => item.id === selectedSubaccountId);
+      if (subaccount) {
+        subaccount.name = name;
+        showToast("補助科目を変更しました");
+      } else {
+        account.subaccounts.push({ id: nextSubaccountId++, name });
+        showToast("補助科目を追加しました");
+      }
+      selectedSubaccountId = null;
+      subaccountForm.reset();
+      saveSubaccount.textContent = "補助科目を追加";
+      renderAccounts();
+      renderSubaccounts();
+    });
+
+    renderAccounts();
+    renderSubaccounts();
+  </script>
+</body>
+</html>

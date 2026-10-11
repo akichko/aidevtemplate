@@ -1,11 +1,379 @@
 openapi: 3.0.3
 info:
-  title: Web App API
-  version: 0.1.0
+  title: 会計アプリケーションAPI
+  version: 1.0.0
+servers:
+  - url: /api
 paths:
-  /api/example:
+  /accounts:
     get:
-      summary: Example
+      summary: 勘定科目一覧を取得する
+      parameters:
+        - in: query
+          name: category
+          schema:
+            $ref: '#/components/schemas/AccountCategory'
       responses:
         '200':
-          description: OK
+          description: 勘定科目一覧
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AccountListItem'
+    post:
+      summary: 勘定科目を登録する
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountInput'
+      responses:
+        '201':
+          description: 登録した勘定科目
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /accounts/{accountId}:
+    parameters:
+      - $ref: '#/components/parameters/AccountId'
+    get:
+      summary: 勘定科目と補助科目一覧を取得する
+      responses:
+        '200':
+          description: 勘定科目詳細
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      summary: 勘定科目を変更する
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountInput'
+      responses:
+        '200':
+          description: 変更した勘定科目
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /accounts/{accountId}/subaccounts:
+    parameters:
+      - $ref: '#/components/parameters/AccountId'
+    post:
+      summary: 補助科目を登録する
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubaccountInput'
+      responses:
+        '201':
+          description: 登録した補助科目
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subaccount'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /accounts/{accountId}/subaccounts/{subaccountId}:
+    parameters:
+      - $ref: '#/components/parameters/AccountId'
+      - name: subaccountId
+        in: path
+        required: true
+        schema:
+          type: integer
+    put:
+      summary: 補助科目を変更する
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubaccountInput'
+      responses:
+        '200':
+          description: 変更した補助科目
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Subaccount'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /journals:
+    get:
+      summary: 仕訳一覧を取得する
+      responses:
+        '200':
+          description: 仕訳一覧
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Journal'
+    post:
+      summary: 貸借一致を検証して仕訳を登録する
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JournalInput'
+      responses:
+        '201':
+          description: 登録した仕訳
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Journal'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /reports/balance-sheet:
+    get:
+      summary: 貸借対照表を取得する
+      parameters:
+        - in: query
+          name: asOf
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: 指定日時点の貸借対照表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BalanceSheet'
+  /reports/income-statement:
+    get:
+      summary: 損益計算書を取得する
+      parameters:
+        - in: query
+          name: start
+          required: true
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: end
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: 指定期間の損益計算書
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncomeStatement'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+components:
+  parameters:
+    AccountId:
+      name: accountId
+      in: path
+      required: true
+      schema:
+        type: integer
+  responses:
+    BadRequest:
+      description: 入力値が不正
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: 対象データが存在しない
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+  schemas:
+    AccountCategory:
+      type: string
+      enum: [asset, liability, equity, profit, loss]
+    AccountInput:
+      type: object
+      required: [name, category]
+      properties:
+        name:
+          type: string
+          minLength: 1
+        category:
+          $ref: '#/components/schemas/AccountCategory'
+    AccountListItem:
+      allOf:
+        - $ref: '#/components/schemas/AccountInput'
+        - type: object
+          required: [id, subaccountCount]
+          properties:
+            id:
+              type: integer
+            subaccountCount:
+              type: integer
+    Account:
+      allOf:
+        - $ref: '#/components/schemas/AccountListItem'
+        - type: object
+          required: [subaccounts]
+          properties:
+            subaccounts:
+              type: array
+              items:
+                $ref: '#/components/schemas/Subaccount'
+    SubaccountInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+    Subaccount:
+      allOf:
+        - $ref: '#/components/schemas/SubaccountInput'
+        - type: object
+          required: [id, accountId]
+          properties:
+            id:
+              type: integer
+            accountId:
+              type: integer
+    JournalLineInput:
+      type: object
+      required: [accountId, side, amount]
+      properties:
+        accountId:
+          type: integer
+        side:
+          type: string
+          enum: [debit, credit]
+        amount:
+          type: integer
+          minimum: 1
+    JournalInput:
+      type: object
+      required: [date, description, lines]
+      properties:
+        date:
+          type: string
+          format: date
+        description:
+          type: string
+          minLength: 1
+        lines:
+          type: array
+          minItems: 2
+          items:
+            $ref: '#/components/schemas/JournalLineInput'
+    Journal:
+      allOf:
+        - $ref: '#/components/schemas/JournalInput'
+        - type: object
+          required: [id, debitTotal, creditTotal]
+          properties:
+            id:
+              type: integer
+            debitTotal:
+              type: integer
+            creditTotal:
+              type: integer
+    StatementLine:
+      type: object
+      required: [accountId, accountName, amount]
+      properties:
+        accountId:
+          type: integer
+        accountName:
+          type: string
+        amount:
+          type: integer
+    BalanceSheet:
+      type: object
+      required: [asOf, assets, liabilities, equity, totals]
+      properties:
+        asOf:
+          type: string
+          format: date
+        assets:
+          type: array
+          items:
+            $ref: '#/components/schemas/StatementLine'
+        liabilities:
+          type: array
+          items:
+            $ref: '#/components/schemas/StatementLine'
+        equity:
+          type: array
+          items:
+            $ref: '#/components/schemas/StatementLine'
+        totals:
+          type: object
+          required: [assets, liabilities, equity]
+          properties:
+            assets:
+              type: integer
+            liabilities:
+              type: integer
+            equity:
+              type: integer
+    IncomeStatement:
+      type: object
+      required: [start, end, revenues, expenses, totals]
+      properties:
+        start:
+          type: string
+          format: date
+        end:
+          type: string
+          format: date
+        revenues:
+          type: array
+          items:
+            $ref: '#/components/schemas/StatementLine'
+        expenses:
+          type: array
+          items:
+            $ref: '#/components/schemas/StatementLine'
+        totals:
+          type: object
+          required: [revenues, expenses, netIncome]
+          properties:
+            revenues:
+              type: integer
+            expenses:
+              type: integer
+            netIncome:
+              type: integer
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
