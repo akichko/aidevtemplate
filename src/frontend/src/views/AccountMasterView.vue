@@ -139,7 +139,7 @@ onMounted(async () => {
         <div class="panel-head master-list-head"><h2 class="panel-title" id="account-list-heading">勘定科目一覧</h2><button class="button subtle" type="button" @click="resetAccountForm">＋ 新規</button></div>
         <div class="master-filter"><label class="sr-only" for="category-filter">勘定科目区分で絞り込み</label><select id="category-filter" v-model="categoryFilter" class="control" @change="applyFilter"><option value="">すべての区分</option><option v-for="category in categories" :key="category" :value="category">{{ categoryLabels[category] }}</option></select></div>
         <div class="table-scroll"><table class="master-table"><thead><tr><th>勘定科目名</th><th>区分</th><th class="right">補助科目</th></tr></thead><tbody>
-          <tr v-for="account in visibleAccounts" :key="account.id" :aria-selected="account.id === selectedAccountId"><td><button class="master-select" type="button" @click="selectAccount(account.id)">{{ account.name }}</button></td><td>{{ categoryLabels[account.category] }}</td><td class="right">{{ account.subaccountCount }}</td></tr>
+          <tr v-for="account in visibleAccounts" :key="account.id" :aria-selected="account.id === selectedAccountId"><td><button class="master-select" type="button" @click="selectAccount(account.id)">{{ account.name }}</button><span v-if="account.isSystem" class="panel-note"> システム</span></td><td>{{ categoryLabels[account.category] }}</td><td class="right">{{ account.subaccountCount }}</td></tr>
           <tr v-if="visibleAccounts.length === 0"><td class="empty-row" colspan="3">{{ accounts.length ? "該当する勘定科目はありません" : "勘定科目はありません" }}</td></tr>
         </tbody></table></div>
       </section>
@@ -148,19 +148,22 @@ onMounted(async () => {
         <section class="panel master-editor-panel" aria-labelledby="account-editor-heading">
           <div class="panel-head"><h2 class="panel-title" id="account-editor-heading">{{ selectedAccount ? "勘定科目を変更" : "勘定科目を登録" }}</h2></div>
           <form class="master-form" @submit.prevent="saveAccount">
-            <div class="master-fields"><div class="field"><label for="account-name">勘定科目名</label><input id="account-name" v-model="accountName" class="control" type="text" required></div><div class="field"><label for="account-category">勘定科目区分</label><select id="account-category" v-model="accountCategory" class="control" required><option value="">区分を選択</option><option v-for="category in categories" :key="category" :value="category">{{ categoryLabels[category] }}</option></select></div></div>
+            <div class="master-fields"><div class="field"><label for="account-name">勘定科目名</label><input id="account-name" v-model="accountName" class="control" type="text" required></div><div class="field"><label for="account-category">勘定科目区分</label><select id="account-category" v-model="accountCategory" class="control" required :disabled="selectedAccount?.isSystem"><option value="">区分を選択</option><option v-for="category in categories" :key="category" :value="category">{{ categoryLabels[category] }}</option></select><span v-if="selectedAccount?.isSystem" class="panel-note">システム勘定科目の区分は変更できません。</span></div></div>
             <div class="form-footer"><button v-if="selectedAccount" class="button secondary" type="button" @click="resetAccountForm">新規入力に戻る</button><button class="button" type="submit" :disabled="busy">{{ selectedAccount ? "変更を保存" : "勘定科目を登録" }}</button></div>
           </form>
         </section>
 
         <section class="panel subaccount-panel" aria-labelledby="subaccount-heading">
           <div class="panel-head"><div><h2 class="panel-title" id="subaccount-heading">補助科目</h2><p class="panel-note">{{ selectedAccount?.name ?? "勘定科目を選択してください" }}</p></div></div>
+          <p v-if="selectedAccount?.systemKey === 'fixed_asset'" class="empty-state">固定資産は固定資産マスタで管理します。</p>
+          <template v-else>
           <form class="subaccount-form" @submit.prevent="saveSubaccount"><div class="field"><label for="subaccount-name">補助科目名</label><input id="subaccount-name" v-model="subaccountName" class="control" type="text" required :disabled="!selectedAccount"></div><button class="button subtle" type="submit" :disabled="!selectedAccount || busy">{{ editingSubaccountId ? "変更を保存" : "補助科目を追加" }}</button></form>
           <div class="table-scroll"><table class="master-table"><thead><tr><th>補助科目名</th><th class="right">操作</th></tr></thead><tbody>
             <tr v-for="subaccount in selectedAccount?.subaccounts ?? []" :key="subaccount.id"><td>{{ subaccount.name }}</td><td class="right"><button class="text-button" type="button" @click="editSubaccount(subaccount)">変更</button></td></tr>
             <tr v-if="selectedAccount && selectedAccount.subaccounts.length === 0"><td class="empty-row" colspan="2">補助科目はありません</td></tr>
             <tr v-if="!selectedAccount"><td class="empty-row" colspan="2">勘定科目を選択してください</td></tr>
           </tbody></table></div>
+          </template>
         </section>
       </div>
     </div>

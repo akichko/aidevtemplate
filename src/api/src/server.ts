@@ -3,6 +3,7 @@ import dotenv from "dotenv";
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { AccountingService } from "./application/accounting-service.js";
+import { FixedAssetService } from "./application/fixed-asset-service.js";
 import { SqliteAccountingRepository } from "./infrastructure/sqlite-repository.js";
 import { SqlServerAccountingRepository } from "./infrastructure/sqlserver-repository.js";
 import { createRouter } from "./presentation/routes.js";
@@ -23,7 +24,10 @@ async function start(): Promise<void> {
   const app = express();
   app.disable("x-powered-by");
   app.use(express.json({ limit: "1mb" }));
-  app.use("/api", createRouter(new AccountingService(repository)));
+  app.use("/api", createRouter(
+    new AccountingService(repository, repository),
+    new FixedAssetService(repository, repository),
+  ));
   app.use((_request, response) => response.status(404).json({ error: { code: "NOT_FOUND", message: "対象のAPIがありません。" } }));
 
   const port = Number(process.env.PORT ?? 3001);

@@ -1,4 +1,5 @@
 import type { AccountingRepository } from "./repository.js";
+import type { FixedAssetCandidateQuery } from "./fixed-asset-repository.js";
 import {
   DomainError,
   accountCategories,
@@ -19,7 +20,10 @@ export class NotFoundError extends Error {
 }
 
 export class AccountingService {
-  constructor(private readonly repository: AccountingRepository) {}
+  constructor(
+    private readonly repository: AccountingRepository,
+    private readonly fixedAssetOptions: FixedAssetCandidateQuery,
+  ) {}
 
   async listAccounts(category?: string) {
     if (category && !accountCategories.includes(category as AccountCategory)) {
@@ -45,6 +49,11 @@ export class AccountingService {
     const value = asObject(input);
     const accountInput = { name: value.name, category: value.category };
     validateAccountInput(accountInput);
+    const existing = await this.repository.getAccount(accountId);
+    if (!existing) throw new NotFoundError("勘定科目が見つかりません。");
+    if (existing.isSystem && existing.category !== accountInput.category) {
+      throw new DomainError("初期勘定科目の区分は変更できません。", "SYSTEM_ACCOUNT_CATEGORY_LOCKED");
+    }
     const account = await this.repository.updateAccount(accountId, {
       name: accountInput.name.trim(),
       category: accountInput.category,
@@ -56,6 +65,11 @@ export class AccountingService {
   async createSubaccount(accountId: number, input: unknown) {
     const value = asObject(input);
     validateSubaccountName(value.name);
+    const account = await this.repository.getAccount(accountId);
+    if (!account) throw new NotFoundError("勘定科目が見つかりません。");
+    if (account.systemKey === "fixed_asset") {
+      throw new DomainError("固定資産科目は固定資産マスタで管理します。", "SYSTEM_ACCOUNT_SUBACCOUNTS_LOCKED");
+    }
     const subaccount = await this.repository.createSubaccount(accountId, value.name);
     if (!subaccount) throw new NotFoundError("勘定科目が見つかりません。");
     return subaccount;
@@ -64,6 +78,11 @@ export class AccountingService {
   async updateSubaccount(accountId: number, subaccountId: number, input: unknown) {
     const value = asObject(input);
     validateSubaccountName(value.name);
+    const account = await this.repository.getAccount(accountId);
+    if (!account) throw new NotFoundError("勘定科目が見つかりません。");
+    if (account.systemKey === "fixed_asset") {
+      throw new DomainError("固定資産科目は固定資産マスタで管理します。", "SYSTEM_ACCOUNT_SUBACCOUNTS_LOCKED");
+    }
     const subaccount = await this.repository.updateSubaccount(accountId, subaccountId, value.name);
     if (!subaccount) throw new NotFoundError("勘定科目または補助科目が見つかりません。");
     return subaccount;
@@ -88,8 +107,13 @@ export class AccountingService {
       if (!account) {
         throw new DomainError("仕訳明細の勘定科目が見つかりません。", "INVALID_ACCOUNT_ID");
       }
-      if (line.subaccountId !== undefined && !account.subaccounts.some((subaccount) => subaccount.id === line.subaccountId)) {
-        throw new DomainError("補助科目が選択した勘定科目に属していません。", "INVALID_SUBACCOUNT_ID");
+      if (line.subaccountId !== undefined) {
+        const validReference = account.systemKey === "fixed_asset"
+          ? await this.fixedAssetOptions.getJournalOption(line.subaccountId)
+          : account.subaccounts.some((subaccount) => subaccount.id === line.subaccountId);
+        if (!validReference) {
+          throw new DomainError("補助科目または固定資産が選択した勘定科目に属していません。", "INVALID_SUBACCOUNT_ID");
+        }
       }
     }
     return this.repository.createJournal(value);
@@ -103,8 +127,13 @@ export class AccountingService {
       if (!account) {
         throw new DomainError("仕訳明細の勘定科目が見つかりません。", "INVALID_ACCOUNT_ID");
       }
-      if (line.subaccountId !== undefined && !account.subaccounts.some((subaccount) => subaccount.id === line.subaccountId)) {
-        throw new DomainError("補助科目が選択した勘定科目に属していません。", "INVALID_SUBACCOUNT_ID");
+      if (line.subaccountId !== undefined) {
+        const validReference = account.systemKey === "fixed_asset"
+          ? await this.fixedAssetOptions.getJournalOption(line.subaccountId)
+          : account.subaccounts.some((subaccount) => subaccount.id === line.subaccountId);
+        if (!validReference) {
+          throw new DomainError("補助科目または固定資産が選択した勘定科目に属していません。", "INVALID_SUBACCOUNT_ID");
+        }
       }
     }
     const journal = await this.repository.updateJournal(journalId, value);

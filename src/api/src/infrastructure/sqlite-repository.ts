@@ -1,11 +1,15 @@
 import Database from "better-sqlite3";
 import type { AccountingRepository } from "../application/repository.js";
+import type { FixedAssetRepository } from "../application/fixed-asset-repository.js";
 import {
   calculateBalanceSheet,
   calculateIncomeStatement,
   journalMonthRange,
   type Account,
   type AccountCategory,
+  type FixedAsset,
+  type FixedAssetInput,
+  type FixedAssetOption,
   type Journal,
   type JournalInput,
   type Subaccount,
@@ -13,6 +17,8 @@ import {
 
 interface AccountRow {
   id: number;
+  system_key: string | null;
+  is_system: number;
   name: string;
   category: AccountCategory;
   subaccountCount: number;
@@ -22,6 +28,17 @@ interface SubaccountRow {
   id: number;
   account_id: number;
   name: string;
+}
+
+interface FixedAssetRow {
+  id: number;
+  name: string | null;
+  acquisition_date: string | null;
+  acquisition_price: number | null;
+  depreciation_method: string | null;
+  useful_life: number | null;
+  residual_value: number | null;
+  depreciation_start_date: string | null;
 }
 
 interface JournalRow {
@@ -39,7 +56,7 @@ interface JournalLineRow {
   amount: number;
 }
 
-export class SqliteAccountingRepository implements AccountingRepository {
+export class SqliteAccountingRepository implements AccountingRepository, FixedAssetRepository {
   private readonly database: Database.Database;
 
   constructor(path: string) {
@@ -52,6 +69,8 @@ export class SqliteAccountingRepository implements AccountingRepository {
     this.database.exec(`
       CREATE TABLE IF NOT EXISTS accounts (
         id INTEGER PRIMARY KEY,
+        system_key TEXT,
+        is_system INTEGER NOT NULL DEFAULT 0 CHECK (is_system IN (0, 1)),
         name TEXT NOT NULL,
         category TEXT NOT NULL CHECK (category IN ('asset', 'liability', 'equity', 'profit', 'loss'))
       );
@@ -72,11 +91,36 @@ export class SqliteAccountingRepository implements AccountingRepository {
         account_id INTEGER NOT NULL REFERENCES accounts(id),
         subaccount_id INTEGER,
         side TEXT NOT NULL CHECK (side IN ('debit', 'credit')),
-        amount INTEGER NOT NULL CHECK (amount > 0),
-        FOREIGN KEY (account_id, subaccount_id) REFERENCES subaccounts(account_id, id)
+          amount INTEGER NOT NULL CHECK (amount > 0)
       );
+        CREATE TABLE IF NOT EXISTS fixed_assets (
+          id INTEGER PRIMARY KEY,
+          name TEXT,
+          acquisition_date TEXT,
+          acquisition_price REAL,
+          depreciation_method TEXT,
+          useful_life REAL,
+          residual_value REAL,
+          depreciation_start_date TEXT
+        );
       CREATE INDEX IF NOT EXISTS ix_journal_entries_date ON journal_entries(entry_date);
     `);
+    const accountColumns = this.database.pragma("table_info(accounts)") as Array<{ name: string }>;
+    if (!accountColumns.some((column) => column.name === "system_key")) {
+      this.database.exec("ALTER TABLE accounts ADD COLUMN system_key TEXT");
+    }
+    if (!accountColumns.some((column) => column.name === "is_system")) {
+      this.database.exec("ALTER TABLE accounts ADD COLUMN is_system INTEGER NOT NULL DEFAULT 0 CHECK (is_system IN (0, 1))");
+    }
+    this.database.exec("CREATE UNIQUE INDEX IF NOT EXISTS ux_accounts_system_key ON accounts(system_key)");
+    this.database.prepare(`
+      INSERT OR IGNORE INTO accounts (system_key, is_system, name, category)
+      VALUES (?, 1, ?, ?)
+    `).run("fixed_asset", "固定資産", "asset");
+    this.database.prepare(`
+      INSERT OR IGNORE INTO accounts (system_key, is_system, name, category)
+      VALUES (?, 1, ?, ?)
+    `).run("depreciation_expense", "減価償却費", "loss");
     this.database.exec(
       "CREATE UNIQUE INDEX IF NOT EXISTS ux_subaccounts_account_id_id ON subaccounts(account_id, id)",
     );
@@ -90,11 +134,30 @@ export class SqliteAccountingRepository implements AccountingRepository {
             account_id INTEGER NOT NULL REFERENCES accounts(id),
             subaccount_id INTEGER,
             side TEXT NOT NULL CHECK (side IN ('debit', 'credit')),
-            amount INTEGER NOT NULL CHECK (amount > 0),
-            FOREIGN KEY (account_id, subaccount_id) REFERENCES subaccounts(account_id, id)
+            amount INTEGER NOT NULL CHECK (amount > 0)
           );
-          INSERT INTO journal_lines_new (id, journal_entry_id, account_id, side, amount)
-            SELECT id, journal_entry_id, account_id, side, amount FROM journal_lines;
+          INSERT INTO journal_lines_new (id, journal_entry_id, account_id, subaccount_id, side, amount)
+            SELECT id, journal_entry_id, account_id, NULL, side, amount FROM journal_lines;
+          DROP TABLE journal_lines;
+          ALTER TABLE journal_lines_new RENAME TO journal_lines;
+        `);
+      });
+      migrate();
+    }
+    const lineForeignKeys = this.database.pragma("foreign_key_list(journal_lines)") as Array<{ table: string }>;
+    if (lineForeignKeys.some((foreignKey) => foreignKey.table === "subaccounts")) {
+      const migrate = this.database.transaction(() => {
+        this.database.exec(`
+          CREATE TABLE journal_lines_new (
+            id INTEGER PRIMARY KEY,
+            journal_entry_id INTEGER NOT NULL REFERENCES journal_entries(id) ON DELETE CASCADE,
+            account_id INTEGER NOT NULL REFERENCES accounts(id),
+            subaccount_id INTEGER,
+            side TEXT NOT NULL CHECK (side IN ('debit', 'credit')),
+            amount INTEGER NOT NULL CHECK (amount > 0)
+          );
+          INSERT INTO journal_lines_new (id, journal_entry_id, account_id, subaccount_id, side, amount)
+            SELECT id, journal_entry_id, account_id, subaccount_id, side, amount FROM journal_lines;
           DROP TABLE journal_lines;
           ALTER TABLE journal_lines_new RENAME TO journal_lines;
         `);
@@ -110,29 +173,29 @@ export class SqliteAccountingRepository implements AccountingRepository {
 
   async listAccounts(category?: AccountCategory): Promise<Account[]> {
     const rows = this.database.prepare(`
-      SELECT a.id, a.name, a.category, COUNT(s.id) AS subaccountCount
+      SELECT a.id, a.system_key, a.is_system, a.name, a.category, COUNT(s.id) AS subaccountCount
       FROM accounts a
       LEFT JOIN subaccounts s ON s.account_id = a.id
       ${category ? "WHERE a.category = ?" : ""}
-      GROUP BY a.id, a.name, a.category
+      GROUP BY a.id, a.system_key, a.is_system, a.name, a.category
       ORDER BY a.category, a.name, a.id
     `).all(...(category ? [category] : [])) as AccountRow[];
-    return rows.map((row) => ({ ...row, subaccounts: [] }));
+    return rows.map((row) => mapAccount(row, []));
   }
 
   async getAccount(accountId: number): Promise<Account | null> {
     const row = this.database.prepare(`
-      SELECT a.id, a.name, a.category, COUNT(s.id) AS subaccountCount
+      SELECT a.id, a.system_key, a.is_system, a.name, a.category, COUNT(s.id) AS subaccountCount
       FROM accounts a
       LEFT JOIN subaccounts s ON s.account_id = a.id
       WHERE a.id = ?
-      GROUP BY a.id, a.name, a.category
+      GROUP BY a.id, a.system_key, a.is_system, a.name, a.category
     `).get(accountId) as AccountRow | undefined;
     if (!row) return null;
     const subaccounts = this.database.prepare(
       "SELECT id, account_id, name FROM subaccounts WHERE account_id = ? ORDER BY name, id",
     ).all(accountId) as SubaccountRow[];
-    return { ...row, subaccounts: subaccounts.map(mapSubaccount) };
+    return mapAccount(row, subaccounts.map(mapSubaccount));
   }
 
   async createAccount(input: { name: string; category: AccountCategory }): Promise<Account> {
@@ -142,8 +205,9 @@ export class SqliteAccountingRepository implements AccountingRepository {
   }
 
   async updateAccount(accountId: number, input: { name: string; category: AccountCategory }): Promise<Account | null> {
-    const result = this.database.prepare("UPDATE accounts SET name = ?, category = ? WHERE id = ?")
-      .run(input.name.trim(), input.category, accountId);
+    const result = this.database.prepare(
+      "UPDATE accounts SET name = ?, category = ? WHERE id = ? AND (is_system = 0 OR category = ?)",
+    ).run(input.name.trim(), input.category, accountId, input.category);
     return result.changes === 0 ? null : this.getAccount(accountId);
   }
 
@@ -159,6 +223,67 @@ export class SqliteAccountingRepository implements AccountingRepository {
       "UPDATE subaccounts SET name = ? WHERE id = ? AND account_id = ?",
     ).run(name.trim(), subaccountId, accountId);
     return result.changes === 0 ? null : { id: subaccountId, accountId, name: name.trim() };
+  }
+
+  async listFixedAssets(): Promise<FixedAsset[]> {
+    const rows = this.database.prepare(`
+      SELECT id, name, acquisition_date, acquisition_price, depreciation_method, useful_life, residual_value, depreciation_start_date
+      FROM fixed_assets ORDER BY name, id
+    `).all() as FixedAssetRow[];
+    return rows.map(mapFixedAsset);
+  }
+
+  async getFixedAsset(fixedAssetId: number): Promise<FixedAsset | null> {
+    const row = this.database.prepare(`
+      SELECT id, name, acquisition_date, acquisition_price, depreciation_method, useful_life, residual_value, depreciation_start_date
+      FROM fixed_assets WHERE id = ?
+    `).get(fixedAssetId) as FixedAssetRow | undefined;
+    return row ? mapFixedAsset(row) : null;
+  }
+
+  async createFixedAsset(input: FixedAssetInput): Promise<FixedAsset> {
+    const result = this.database.prepare(`
+      INSERT INTO fixed_assets (name, acquisition_date, acquisition_price, depreciation_method, useful_life, residual_value, depreciation_start_date)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      input.name ?? null,
+      input.acquisitionDate ?? null,
+      input.acquisitionPrice ?? null,
+      input.depreciationMethod ?? null,
+      input.usefulLife ?? null,
+      input.residualValue ?? null,
+      input.depreciationStartDate ?? null,
+    );
+    return (await this.getFixedAsset(Number(result.lastInsertRowid)))!;
+  }
+
+  async updateFixedAsset(fixedAssetId: number, input: FixedAssetInput): Promise<FixedAsset | null> {
+    const result = this.database.prepare(`
+      UPDATE fixed_assets SET name = ?, acquisition_date = ?, acquisition_price = ?, depreciation_method = ?, useful_life = ?, residual_value = ?, depreciation_start_date = ?
+      WHERE id = ?
+    `).run(
+      input.name ?? null,
+      input.acquisitionDate ?? null,
+      input.acquisitionPrice ?? null,
+      input.depreciationMethod ?? null,
+      input.usefulLife ?? null,
+      input.residualValue ?? null,
+      input.depreciationStartDate ?? null,
+      fixedAssetId,
+    );
+    return result.changes === 0 ? null : this.getFixedAsset(fixedAssetId);
+  }
+
+  async listJournalOptions(): Promise<FixedAssetOption[]> {
+    return (await this.listFixedAssets()).map((asset) => ({
+      id: asset.id,
+      name: asset.name?.trim() || `固定資産 ${asset.id}`,
+    }));
+  }
+
+  async getJournalOption(fixedAssetId: number): Promise<FixedAssetOption | null> {
+    const asset = await this.getFixedAsset(fixedAssetId);
+    return asset ? { id: asset.id, name: asset.name?.trim() || `固定資産 ${asset.id}` } : null;
   }
 
   async listJournals(month?: string): Promise<Journal[]> {
@@ -238,6 +363,31 @@ export class SqliteAccountingRepository implements AccountingRepository {
 
 function mapSubaccount(row: SubaccountRow): Subaccount {
   return { id: row.id, accountId: row.account_id, name: row.name };
+}
+
+function mapFixedAsset(row: FixedAssetRow): FixedAsset {
+  return {
+    id: row.id,
+    ...(row.name === null ? {} : { name: row.name }),
+    ...(row.acquisition_date === null ? {} : { acquisitionDate: row.acquisition_date }),
+    ...(row.acquisition_price === null ? {} : { acquisitionPrice: row.acquisition_price }),
+    ...(row.depreciation_method === null ? {} : { depreciationMethod: row.depreciation_method }),
+    ...(row.useful_life === null ? {} : { usefulLife: row.useful_life }),
+    ...(row.residual_value === null ? {} : { residualValue: row.residual_value }),
+    ...(row.depreciation_start_date === null ? {} : { depreciationStartDate: row.depreciation_start_date }),
+  };
+}
+
+function mapAccount(row: AccountRow, subaccounts: Subaccount[]): Account {
+  return {
+    id: row.id,
+    systemKey: row.system_key as Account["systemKey"],
+    isSystem: row.is_system === 1,
+    name: row.name,
+    category: row.category,
+    subaccountCount: row.subaccountCount,
+    subaccounts,
+  };
 }
 
 function mapJournal(header: JournalRow, rows: JournalLineRow[]): Journal {

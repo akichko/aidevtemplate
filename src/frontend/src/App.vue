@@ -3,6 +3,7 @@ import { computed, ref } from "vue";
 import AccountMasterView from "./views/AccountMasterView.vue";
 import BalanceSheetView from "./views/BalanceSheetView.vue";
 import IncomeStatementView from "./views/IncomeStatementView.vue";
+import FixedAssetMasterView from "./views/FixedAssetMasterView.vue";
 import JournalListView from "./views/JournalListView.vue";
 import JournalView from "./views/JournalView.vue";
 
@@ -10,6 +11,7 @@ const screens = [
   { id: "journals", title: "仕訳一覧", icon: "☷", component: JournalListView },
   { id: "balance", title: "貸借対照表", icon: "▤", component: BalanceSheetView },
   { id: "income", title: "損益計算書", icon: "▥", component: IncomeStatementView },
+  { id: "fixed-assets", title: "固定資産マスタ", icon: "▧", component: FixedAssetMasterView },
   { id: "accounts", title: "勘定科目マスタ", icon: "≡", component: AccountMasterView },
 ] as const;
 

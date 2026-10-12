@@ -8,6 +8,8 @@ export interface Subaccount {
 
 export interface Account {
   id: number;
+  systemKey: "fixed_asset" | "depreciation_expense" | null;
+  isSystem: boolean;
   name: string;
   category: AccountCategory;
   subaccountCount: number;
@@ -28,6 +30,25 @@ export interface Journal {
   lines: JournalLineInput[];
   debitTotal: number;
   creditTotal: number;
+}
+
+export interface FixedAssetInput {
+  name?: string;
+  acquisitionDate?: string;
+  acquisitionPrice?: number;
+  depreciationMethod?: string;
+  usefulLife?: number;
+  residualValue?: number;
+  depreciationStartDate?: string;
+}
+
+export interface FixedAsset extends FixedAssetInput {
+  id: number;
+}
+
+export interface FixedAssetOption {
+  id: number;
+  name: string;
 }
 
 export interface StatementLine {
@@ -90,6 +111,21 @@ export const accountingApi = {
       method: "PUT",
       body: JSON.stringify({ name }),
     });
+  },
+  listFixedAssets() {
+    return request<FixedAsset[]>("/fixed-assets");
+  },
+  getFixedAsset(id: number) {
+    return request<FixedAsset>(`/fixed-assets/${id}`);
+  },
+  createFixedAsset(input: FixedAssetInput) {
+    return request<FixedAsset>("/fixed-assets", { method: "POST", body: JSON.stringify(input) });
+  },
+  updateFixedAsset(id: number, input: FixedAssetInput) {
+    return request<FixedAsset>(`/fixed-assets/${id}`, { method: "PUT", body: JSON.stringify(input) });
+  },
+  listFixedAssetOptions() {
+    return request<FixedAssetOption[]>("/fixed-assets/journal-options");
   },
   listJournals(month: string) {
     return request<Journal[]>(`/journals?month=${encodeURIComponent(month)}`);

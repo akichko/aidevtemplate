@@ -1,10 +1,14 @@
 export const accountCategories = ["asset", "liability", "equity", "profit", "loss"] as const;
+export const systemAccountKeys = ["fixed_asset", "depreciation_expense"] as const;
 
 export type AccountCategory = (typeof accountCategories)[number];
+export type SystemAccountKey = (typeof systemAccountKeys)[number];
 export type Side = "debit" | "credit";
 
 export interface Account {
   id: number;
+  systemKey: SystemAccountKey | null;
+  isSystem: boolean;
   name: string;
   category: AccountCategory;
   subaccountCount: number;
@@ -34,6 +38,25 @@ export interface Journal extends JournalInput {
   id: number;
   debitTotal: number;
   creditTotal: number;
+}
+
+export interface FixedAssetInput {
+  name?: string;
+  acquisitionDate?: string;
+  acquisitionPrice?: number;
+  depreciationMethod?: string;
+  usefulLife?: number;
+  residualValue?: number;
+  depreciationStartDate?: string;
+}
+
+export interface FixedAsset extends FixedAssetInput {
+  id: number;
+}
+
+export interface FixedAssetOption {
+  id: number;
+  name: string;
 }
 
 export interface StatementLine {
@@ -228,4 +251,35 @@ export function isValidDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const parsed = new Date(`${value}T00:00:00.000Z`);
   return !Number.isNaN(parsed.valueOf()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+export function validateFixedAssetInput(input: unknown): FixedAssetInput {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    throw new DomainError("固定資産の入力形式が不正です。", "INVALID_FIXED_ASSET_INPUT");
+  }
+  const value = input as Record<string, unknown>;
+  for (const field of ["name", "depreciationMethod"] as const) {
+    if (value[field] !== undefined && typeof value[field] !== "string") {
+      throw new DomainError("固定資産の文字項目が不正です。", "INVALID_FIXED_ASSET_INPUT");
+    }
+  }
+  for (const field of ["acquisitionDate", "depreciationStartDate"] as const) {
+    if (value[field] !== undefined && (typeof value[field] !== "string" || !isValidDate(value[field]))) {
+      throw new DomainError("固定資産の日付が不正です。", "INVALID_FIXED_ASSET_DATE");
+    }
+  }
+  for (const field of ["acquisitionPrice", "usefulLife", "residualValue"] as const) {
+    if (value[field] !== undefined && (typeof value[field] !== "number" || !Number.isFinite(value[field]))) {
+      throw new DomainError("固定資産の数値項目が不正です。", "INVALID_FIXED_ASSET_VALUE");
+    }
+  }
+  return {
+    ...(typeof value.name === "string" ? { name: value.name.trim() } : {}),
+    ...(typeof value.acquisitionDate === "string" ? { acquisitionDate: value.acquisitionDate } : {}),
+    ...(typeof value.acquisitionPrice === "number" ? { acquisitionPrice: value.acquisitionPrice } : {}),
+    ...(typeof value.depreciationMethod === "string" ? { depreciationMethod: value.depreciationMethod.trim() } : {}),
+    ...(typeof value.usefulLife === "number" ? { usefulLife: value.usefulLife } : {}),
+    ...(typeof value.residualValue === "number" ? { residualValue: value.residualValue } : {}),
+    ...(typeof value.depreciationStartDate === "string" ? { depreciationStartDate: value.depreciationStartDate } : {}),
+  };
 }

@@ -57,7 +57,9 @@
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <script>
-    const accounts = ["現金", "普通預金", "売掛金", "備品", "買掛金", "借入金", "資本金", "売上高", "仕入高", "給与手当", "地代家賃", "通信費", "受取手数料"];
+    const accounts = ["固定資産", "現金", "普通預金", "売掛金", "備品", "買掛金", "借入金", "資本金", "売上高", "仕入高", "給与手当", "地代家賃", "通信費", "受取手数料"];
+    const fixedAssets = ["事務用PC", "会議机"];
+    const subaccountsByAccount = { "普通預金": ["普通預金（本店）"], "売掛金": ["顧客A"] };
     const money = new Intl.NumberFormat("ja-JP");
     const form = document.querySelector("#journal-form");
     const submitButton = document.querySelector("#submit-journal");
@@ -73,13 +75,16 @@
       const options = accounts.map((account) => `<option value="${account}">${account}</option>`).join("");
       row.innerHTML = `<span class="row-index" aria-hidden="true">${list.children.length + 1}</span>
         <select class="control account-select" aria-label="${sideLabel}勘定科目" required><option value="">勘定科目を選択</option>${options}</select>
+        <select class="control subaccount-select" aria-label="${sideLabel}補助科目" disabled><option value="">補助科目なし</option></select>
         <div class="amount-wrap"><input class="control amount-input" type="text" inputmode="numeric" pattern="[1-9][0-9]*" placeholder="金額" aria-label="金額" required><span class="currency">円</span></div>
         <button class="remove-row" type="button" aria-label="${sideLabel}明細を削除" title="明細を削除">×</button>`;
       list.append(row);
+      row.querySelector(".account-select").addEventListener("change", () => updateSubaccountOptions(row));
       row.querySelector(".amount-input").addEventListener("input", updateBalance);
       row.querySelector(".remove-row").addEventListener("click", () => {
         if (list.children.length === 1) {
           row.querySelector(".account-select").value = "";
+          updateSubaccountOptions(row);
           row.querySelector(".amount-input").value = "";
         } else {
           row.remove();
@@ -88,6 +93,17 @@
         updateBalance();
       });
       updateBalance();
+    }
+
+    function updateSubaccountOptions(row) {
+      const accountName = row.querySelector(".account-select").value;
+      const select = row.querySelector(".subaccount-select");
+      const candidates = accountName === "固定資産"
+        ? fixedAssets
+        : subaccountsByAccount[accountName] ?? [];
+      select.replaceChildren(new Option("補助科目なし", ""));
+      candidates.forEach((name, index) => select.add(new Option(name, String(index + 1))));
+      select.disabled = !accountName || candidates.length === 0;
     }
 
     function renumberRows(list) {

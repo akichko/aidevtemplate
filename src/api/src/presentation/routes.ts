@@ -1,11 +1,27 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { AccountingService, NotFoundError } from "../application/accounting-service.js";
+import { FixedAssetService } from "../application/fixed-asset-service.js";
 import { DomainError } from "../domain/accounting.js";
 
-export function createRouter(service: AccountingService): Router {
+export function createRouter(service: AccountingService, fixedAssets: FixedAssetService): Router {
   const router = Router();
 
   router.get("/health", (_request, response) => response.json({ status: "ok" }));
+  router.get("/fixed-assets/journal-options", asyncRoute(async (_request, response) => {
+    response.json(await fixedAssets.listJournalOptions());
+  }));
+  router.get("/fixed-assets", asyncRoute(async (_request, response) => {
+    response.json(await fixedAssets.list());
+  }));
+  router.post("/fixed-assets", asyncRoute(async (request, response) => {
+    response.status(201).json(await fixedAssets.create(request.body));
+  }));
+  router.get("/fixed-assets/:fixedAssetId", asyncRoute(async (request, response) => {
+    response.json(await fixedAssets.get(parseId(request.params.fixedAssetId)));
+  }));
+  router.put("/fixed-assets/:fixedAssetId", asyncRoute(async (request, response) => {
+    response.json(await fixedAssets.update(parseId(request.params.fixedAssetId), request.body));
+  }));
   router.get("/accounts", asyncRoute(async (request, response) => {
     response.json(await service.listAccounts(stringQuery(request.query.category)));
   }));

@@ -65,7 +65,10 @@
 
   <script>
     const categories = ["資産", "負債", "純資産", "利益", "損失"];
-    const accounts = [];
+    const accounts = [
+      { id: 1, systemKey: "fixed_asset", isSystem: true, name: "固定資産", category: "資産", subaccounts: [] },
+      { id: 2, systemKey: "depreciation_expense", isSystem: true, name: "減価償却費", category: "損失", subaccounts: [] },
+    ];
     const accountForm = document.querySelector("#account-form");
     const accountName = document.querySelector("#account-name");
     const accountCategory = document.querySelector("#account-category");
@@ -78,7 +81,7 @@
     const toast = document.querySelector("#toast");
     let selectedAccountId = null;
     let selectedSubaccountId = null;
-    let nextAccountId = 1;
+    let nextAccountId = 3;
     let nextSubaccountId = 1;
     let toastTimer;
 
@@ -119,7 +122,7 @@
         const selectButton = document.createElement("button");
         selectButton.className = "master-select";
         selectButton.type = "button";
-        selectButton.textContent = account.name;
+        selectButton.textContent = account.isSystem ? `${account.name}（初期勘定）` : account.name;
         selectButton.addEventListener("click", () => selectAccount(account.id));
         nameCell.append(selectButton);
         row.append(nameCell);
@@ -134,7 +137,12 @@
       subaccountList.replaceChildren();
       if (!account || account.subaccounts.length === 0) {
         const row = document.createElement("tr");
-        const cell = addCell(row, account ? "補助科目はありません" : "勘定科目を選択してください", "empty-row");
+        const emptyText = !account
+          ? "勘定科目を選択してください"
+          : account.systemKey === "fixed_asset"
+            ? "固定資産は固定資産管理で登録します"
+            : "補助科目はありません";
+        const cell = addCell(row, emptyText, "empty-row");
         cell.colSpan = 2;
         subaccountList.append(row);
         return;
@@ -167,11 +175,14 @@
       selectedSubaccountId = null;
       accountName.value = account.name;
       accountCategory.value = account.category;
+      accountCategory.disabled = Boolean(account.isSystem);
+      document.querySelector("#new-account").disabled = false;
       document.querySelector("#account-editor-heading").textContent = "勘定科目を変更";
       document.querySelector("#save-account").textContent = "変更を保存";
       selectedAccountLabel.textContent = account.name;
-      subaccountName.disabled = false;
-      saveSubaccount.disabled = false;
+      const managesSubaccounts = account.systemKey !== "fixed_asset";
+      subaccountName.disabled = !managesSubaccounts;
+      saveSubaccount.disabled = !managesSubaccounts;
       subaccountName.value = "";
       saveSubaccount.textContent = "補助科目を追加";
       renderAccounts();
@@ -183,6 +194,7 @@
       selectedSubaccountId = null;
       accountForm.reset();
       subaccountForm.reset();
+      accountCategory.disabled = false;
       subaccountName.disabled = true;
       saveSubaccount.disabled = true;
       saveSubaccount.textContent = "補助科目を追加";
@@ -208,11 +220,11 @@
       let account = selectedAccount();
       const isNew = !account;
       if (isNew) {
-        account = { id: nextAccountId++, name, category, subaccounts: [] };
+        account = { id: nextAccountId++, systemKey: null, isSystem: false, name, category, subaccounts: [] };
         accounts.push(account);
       } else {
         account.name = name;
-        account.category = category;
+        if (!account.isSystem) account.category = category;
       }
       selectAccount(account.id);
       showToast(isNew ? "勘定科目を登録しました" : "勘定科目を変更しました");

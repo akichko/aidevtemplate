@@ -117,6 +117,80 @@ paths:
                 $ref: '#/components/schemas/Subaccount'
         '404':
           $ref: '#/components/responses/NotFound'
+  /fixed-assets:
+    get:
+      summary: 固定資産一覧を取得する
+      responses:
+        '200':
+          description: 固定資産一覧
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FixedAsset'
+    post:
+      summary: 固定資産を登録する
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FixedAssetInput'
+      responses:
+        '201':
+          description: 登録した固定資産
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FixedAsset'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /fixed-assets/journal-options:
+    get:
+      summary: 固定資産勘定で選択する固定資産候補を取得する
+      responses:
+        '200':
+          description: 固定資産IDと表示名の候補一覧
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FixedAssetOption'
+  /fixed-assets/{fixedAssetId}:
+    parameters:
+      - $ref: '#/components/parameters/FixedAssetId'
+    get:
+      summary: 固定資産詳細を取得する
+      responses:
+        '200':
+          description: 固定資産詳細
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FixedAsset'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      summary: 固定資産を変更する
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FixedAssetInput'
+      responses:
+        '200':
+          description: 変更した固定資産
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FixedAsset'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
   /journals:
     get:
       summary: 指定月の仕訳一覧を取得する
@@ -252,6 +326,12 @@ components:
       required: true
       schema:
         type: integer
+    FixedAssetId:
+      name: fixedAssetId
+      in: path
+      required: true
+      schema:
+        type: integer
   responses:
     BadRequest:
       description: 入力値が不正
@@ -282,12 +362,20 @@ components:
       allOf:
         - $ref: '#/components/schemas/AccountInput'
         - type: object
-          required: [id, subaccountCount]
+          required: [id, subaccountCount, systemKey, isSystem]
           properties:
             id:
               type: integer
             subaccountCount:
               type: integer
+            systemKey:
+              type: string
+              nullable: true
+              enum: [fixed_asset, depreciation_expense]
+              description: 固定資産勘定または減価償却費勘定の専用ID。通常勘定ではnull。
+            isSystem:
+              type: boolean
+              description: システム初期勘定科目で、削除不可であることを示す。
     Account:
       allOf:
         - $ref: '#/components/schemas/AccountListItem'
@@ -315,6 +403,47 @@ components:
               type: integer
             accountId:
               type: integer
+    FixedAssetInput:
+      type: object
+      description: 必須条件と値域はOPEN-DOM-009～011の確定後に設定する。
+      properties:
+        name:
+          type: string
+        acquisitionDate:
+          type: string
+          format: date
+        acquisitionPrice:
+          type: number
+          description: 通貨、精度、税・付随費用の扱いはOPEN-DOM-010を参照。
+        depreciationMethod:
+          type: string
+          description: 選択肢と適用条件はOPEN-DOM-011で定義する。
+        usefulLife:
+          type: number
+          description: 単位・精度・値域はOPEN-DOM-011で定義する。
+        residualValue:
+          type: number
+          description: 通貨、精度、値域はOPEN-DOM-010～011を参照。
+        depreciationStartDate:
+          type: string
+          format: date
+    FixedAsset:
+      allOf:
+        - $ref: '#/components/schemas/FixedAssetInput'
+        - type: object
+          required: [id]
+          properties:
+            id:
+              type: integer
+    FixedAssetOption:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: integer
+          description: 固定資産勘定の仕訳明細ではsubaccountIdとして使用する。
+        name:
+          type: string
     JournalLineInput:
       type: object
       required: [accountId, side, amount]
@@ -323,7 +452,7 @@ components:
           type: integer
         subaccountId:
           type: integer
-          description: 指定する場合はaccountIdに紐づく補助科目のID。省略時は補助科目なし。
+          description: 通常勘定科目では当該勘定の補助科目ID、固定資産勘定では固定資産ID。解釈はaccountIdのsystemKeyによる。
         side:
           type: string
           enum: [debit, credit]

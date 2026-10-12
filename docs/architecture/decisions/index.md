@@ -1,1 +1,2 @@
 - [ADR-003: 仕訳削除方式](ADR-003-journal-deletion.md)
+- [ADR-004: 固定資産管理のアーキテクチャ境界](ADR-004-fixed-asset-boundary.md)
