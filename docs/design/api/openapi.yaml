@@ -119,16 +119,26 @@ paths:
           $ref: '#/components/responses/NotFound'
   /journals:
     get:
-      summary: 仕訳一覧を取得する
+      summary: 指定月の仕訳一覧を取得する
+      parameters:
+        - in: query
+          name: month
+          required: true
+          description: 対象年月（YYYY-MM）
+          schema:
+            type: string
+            pattern: '^\d{4}-(0[1-9]|1[0-2])$'
       responses:
         '200':
-          description: 仕訳一覧
+          description: 指定月の仕訳一覧（取引日降順）
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: '#/components/schemas/Journal'
+        '400':
+          $ref: '#/components/responses/BadRequest'
     post:
       summary: 貸借一致を検証して仕訳を登録する
       requestBody:
@@ -146,6 +156,46 @@ paths:
                 $ref: '#/components/schemas/Journal'
         '400':
           $ref: '#/components/responses/BadRequest'
+  /journals/{journalId}:
+    parameters:
+      - $ref: '#/components/parameters/JournalId'
+    get:
+      summary: 編集対象の仕訳を取得する
+      responses:
+        '200':
+          description: 仕訳と仕訳明細
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Journal'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      summary: 仕訳を変更する
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JournalInput'
+      responses:
+        '200':
+          description: 変更した仕訳
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Journal'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      summary: 仕訳と明細を物理削除する
+      responses:
+        '204':
+          description: 仕訳と仕訳明細を削除した。復元不可。
+        '404':
+          $ref: '#/components/responses/NotFound'
   /reports/balance-sheet:
     get:
       summary: 貸借対照表を取得する
@@ -192,6 +242,12 @@ components:
   parameters:
     AccountId:
       name: accountId
+      in: path
+      required: true
+      schema:
+        type: integer
+    JournalId:
+      name: journalId
       in: path
       required: true
       schema:

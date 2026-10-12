@@ -101,12 +101,19 @@ h1 { margin: 0; font-size: 27px; font-weight: 750; }
 .form-footer { display: flex; justify-content: flex-end; align-items: center; gap: 11px; margin-top: 16px; }
 .inline-error { flex: 1; margin: 0; color: var(--red); font-size: 11px; }
 .recent-panel { margin-top: 19px; overflow: hidden; }
+.journal-list-toolbar { display: flex; align-items: flex-end; gap: 10px; margin-bottom: 17px; }
+.journal-list-toolbar .month-field { min-width: 180px; }
+.journal-list-toolbar .create-journal-button { margin-left: auto; }
 .table-scroll { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 11px; }
 th { padding: 10px 15px; color: #728078; text-align: left; background: #f8faf8; font-size: 10px; font-weight: 700; white-space: nowrap; }
 td { padding: 12px 15px; border-top: 1px solid #edf1ee; }
 .right { text-align: right; font-variant-numeric: tabular-nums; }
 .empty-row, .empty-state { color: #8a9790; text-align: center; }
+.row-actions { text-align: right; white-space: nowrap; }
+.text-button { padding: 4px 2px; color: var(--green); background: transparent; border: 0; font-size: 11px; font-weight: 700; }
+.text-button:hover:not(:disabled) { text-decoration: underline; }
+.text-button.danger { margin-left: 10px; color: var(--red); }
 .empty-state { padding: 16px 0; margin: 0; font-size: 11px; }
 .page-error { padding: 11px 13px; margin: 13px 0; color: #873c39; background: #fbefed; border: 1px solid #f1d5d2; border-radius: 5px; font-size: 12px; }
 .master-layout { display: grid; grid-template-columns: minmax(0, .9fr) minmax(390px, 1.2fr); align-items: start; gap: 15px; }
@@ -183,6 +190,9 @@ td { padding: 12px 15px; border-top: 1px solid #edf1ee; }
   .form-footer { align-items: stretch; flex-wrap: wrap; }
   .form-footer .button { flex: 1; }
   .inline-error { flex-basis: 100%; }
+  .journal-list-toolbar { flex-wrap: wrap; }
+  .journal-list-toolbar .month-field { flex: 1 1 125px; min-width: 0; }
+  .journal-list-toolbar .create-journal-button { margin-left: 0; }
   .report-tools { align-items: stretch; flex-wrap: wrap; }
   .report-tools .field, .report-tools .field.range { min-width: 0; flex: 1 1 130px; }
   .report-tools .button { align-self: flex-end; }

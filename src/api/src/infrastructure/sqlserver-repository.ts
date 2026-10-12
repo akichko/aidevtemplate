@@ -3,6 +3,7 @@ import type { AccountingRepository } from "../application/repository.js";
 import {
   calculateBalanceSheet,
   calculateIncomeStatement,
+  journalMonthRange,
   type Account,
   type AccountCategory,
   type Journal,
@@ -166,12 +167,35 @@ export class SqlServerAccountingRepository implements AccountingRepository {
     return Number(result.recordset[0]?.changes) === 0 ? null : { id: subaccountId, accountId, name: name.trim() };
   }
 
-  async listJournals(): Promise<Journal[]> {
+  async listJournals(month?: string): Promise<Journal[]> {
+    const range = month ? journalMonthRange(month) : null;
+    const headerRequest = this.connection().request();
+    const lineRequest = this.connection().request();
+    let headerQuery = "SELECT id, entry_date AS entryDate, description FROM dbo.journal_entries";
+    let lineQuery = "SELECT id, journal_entry_id AS journalEntryId, account_id AS accountId, side, amount FROM dbo.journal_lines";
+    if (range) {
+      headerRequest.input("startDate", sql.Date, range.startDate).input("endDate", sql.Date, range.endDate);
+      lineRequest.input("startDate", sql.Date, range.startDate).input("endDate", sql.Date, range.endDate);
+      headerQuery += " WHERE entry_date >= @startDate AND entry_date < @endDate";
+      lineQuery += " WHERE journal_entry_id IN (SELECT id FROM dbo.journal_entries WHERE entry_date >= @startDate AND entry_date < @endDate)";
+    }
+    headerQuery += " ORDER BY entry_date DESC, id DESC";
+    lineQuery += " ORDER BY id";
     const [headers, lines] = await Promise.all([
-      this.connection().request().query<JournalRow>("SELECT id, entry_date AS entryDate, description FROM dbo.journal_entries ORDER BY entry_date DESC, id DESC"),
-      this.connection().request().query<JournalLineRow>("SELECT id, journal_entry_id AS journalEntryId, account_id AS accountId, side, amount FROM dbo.journal_lines ORDER BY id"),
+      headerRequest.query<JournalRow>(headerQuery),
+      lineRequest.query<JournalLineRow>(lineQuery),
     ]);
     return headers.recordset.map((header) => mapJournal(header, lines.recordset.filter((line) => Number(line.journalEntryId) === Number(header.id))));
+  }
+
+  async getJournal(journalId: number): Promise<Journal | null> {
+    const header = await this.connection().request().input("id", sql.BigInt, journalId)
+      .query<JournalRow>("SELECT id, entry_date AS entryDate, description FROM dbo.journal_entries WHERE id = @id");
+    const row = header.recordset[0];
+    if (!row) return null;
+    const lines = await this.connection().request().input("id", sql.BigInt, journalId)
+      .query<JournalLineRow>("SELECT id, journal_entry_id AS journalEntryId, account_id AS accountId, side, amount FROM dbo.journal_lines WHERE journal_entry_id = @id ORDER BY id");
+    return mapJournal(row, lines.recordset);
   }
 
   async createJournal(input: JournalInput): Promise<Journal> {
@@ -192,7 +216,54 @@ export class SqlServerAccountingRepository implements AccountingRepository {
           .query("INSERT INTO dbo.journal_lines (journal_entry_id, account_id, side, amount) VALUES (@entryId, @accountId, @side, @amount)");
       }
       await transaction.commit();
-      return (await this.listJournals()).find((journal) => journal.id === id)!;
+      return (await this.getJournal(id))!;
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  }
+
+  async updateJournal(journalId: number, input: JournalInput): Promise<Journal | null> {
+    const transaction = new sql.Transaction(this.connection());
+    await transaction.begin();
+    try {
+      const update = await new sql.Request(transaction)
+        .input("id", sql.BigInt, journalId)
+        .input("date", sql.Date, input.date)
+        .input("description", sql.NVarChar(sql.MAX), input.description.trim())
+        .query<{ id: number }>("UPDATE dbo.journal_entries SET entry_date = @date, description = @description OUTPUT INSERTED.id WHERE id = @id");
+      if (!update.recordset[0]) {
+        await transaction.rollback();
+        return null;
+      }
+      await new sql.Request(transaction).input("id", sql.BigInt, journalId)
+        .query("DELETE FROM dbo.journal_lines WHERE journal_entry_id = @id");
+      for (const line of input.lines) {
+        await new sql.Request(transaction)
+          .input("entryId", sql.BigInt, journalId)
+          .input("accountId", sql.BigInt, line.accountId)
+          .input("side", sql.NVarChar(10), line.side)
+          .input("amount", sql.BigInt, line.amount)
+          .query("INSERT INTO dbo.journal_lines (journal_entry_id, account_id, side, amount) VALUES (@entryId, @accountId, @side, @amount)");
+      }
+      await transaction.commit();
+      return this.getJournal(journalId);
+    } catch (error) {
+      await transaction.rollback();
+      throw error;
+    }
+  }
+
+  async deleteJournal(journalId: number): Promise<boolean> {
+    const transaction = new sql.Transaction(this.connection());
+    await transaction.begin();
+    try {
+      await new sql.Request(transaction).input("id", sql.BigInt, journalId)
+        .query("DELETE FROM dbo.journal_lines WHERE journal_entry_id = @id");
+      const deleted = await new sql.Request(transaction).input("id", sql.BigInt, journalId)
+        .query<{ id: number }>("DELETE FROM dbo.journal_entries OUTPUT DELETED.id WHERE id = @id");
+      await transaction.commit();
+      return deleted.recordset.length > 0;
     } catch (error) {
       await transaction.rollback();
       throw error;

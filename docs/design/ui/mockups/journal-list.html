@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>仕訳一覧 | 帳務</title>
+  <link rel="stylesheet" href="mockup.css">
+</head>
+<body>
+  <main class="mock-page">
+    <div class="mock-page-inner">
+      <div class="breadcrumb"><span>会計</span><span aria-hidden="true">/</span><strong>仕訳一覧</strong></div>
+      <div class="page-heading"><div><p class="eyebrow">仕訳の確認</p><h1>仕訳一覧</h1><p class="subtitle">選択した月に登録された仕訳を確認します。</p></div><span class="panel-note">表示内容は画面確認用のサンプルです</span></div>
+
+      <form class="panel form-panel" style="margin-bottom: 17px" onsubmit="return false">
+        <div class="report-tools journal-month-tools">
+          <button class="button secondary" id="previous-month" type="button">‹ 前月</button>
+          <div class="field"><label for="journal-month">対象年月</label><input class="control" id="journal-month" type="month" value="2026-04"></div>
+          <button class="button secondary" id="next-month" type="button">翌月 ›</button>
+          <a class="button" href="journal-entry.html">＋ 仕訳を登録</a>
+          <span class="panel-note">3 件</span>
+        </div>
+      </form>
+
+      <section class="panel recent-panel" aria-labelledby="journal-list-heading">
+        <div class="panel-head"><h2 class="panel-title" id="journal-list-heading">2026年4月の仕訳</h2><span class="panel-note">3 件</span></div>
+        <div class="table-scroll"><table>
+          <thead><tr><th>取引日</th><th>摘要</th><th class="right">借方合計</th><th class="right">貸方合計</th><th class="right">操作</th></tr></thead>
+          <tbody>
+            <tr><td>2026/04/30</td><td>事務用品を購入</td><td class="right">8,800 円</td><td class="right">8,800 円</td><td class="right row-actions"><a class="text-button" href="journal-entry.html?mode=edit&amp;id=3">編集</a><button class="text-button danger" type="button">削除</button></td></tr>
+            <tr><td>2026/04/18</td><td>売上を入金</td><td class="right">55,000 円</td><td class="right">55,000 円</td><td class="right row-actions"><a class="text-button" href="journal-entry.html?mode=edit&amp;id=2">編集</a><button class="text-button danger" type="button">削除</button></td></tr>
+            <tr><td>2026/04/01</td><td>開業時の出資</td><td class="right">500,000 円</td><td class="right">500,000 円</td><td class="right row-actions"><a class="text-button" href="journal-entry.html?mode=edit&amp;id=1">編集</a><button class="text-button danger" type="button">削除</button></td></tr>
+          </tbody>
+        </table></div>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

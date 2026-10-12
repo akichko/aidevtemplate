@@ -5,6 +5,7 @@ import {
   isValidDate,
   validateAccountInput,
   validateJournalInput,
+  validateJournalMonth,
   validateSubaccountName,
   type AccountCategory,
   type JournalInput,
@@ -68,8 +69,15 @@ export class AccountingService {
     return subaccount;
   }
 
-  async listJournals() {
-    return this.repository.listJournals();
+  async listJournals(month: unknown) {
+    validateJournalMonth(month);
+    return this.repository.listJournals(month);
+  }
+
+  async getJournal(journalId: number) {
+    const journal = await this.repository.getJournal(journalId);
+    if (!journal) throw new NotFoundError("仕訳が見つかりません。");
+    return journal;
   }
 
   async createJournal(input: unknown) {
@@ -81,6 +89,24 @@ export class AccountingService {
       }
     }
     return this.repository.createJournal(value);
+  }
+
+  async updateJournal(journalId: number, input: unknown) {
+    const value = asObject(input) as unknown as JournalInput;
+    validateJournalInput(value);
+    for (const line of value.lines) {
+      if (!(await this.repository.getAccount(line.accountId))) {
+        throw new DomainError("仕訳明細の勘定科目が見つかりません。", "INVALID_ACCOUNT_ID");
+      }
+    }
+    const journal = await this.repository.updateJournal(journalId, value);
+    if (!journal) throw new NotFoundError("仕訳が見つかりません。");
+    return journal;
+  }
+
+  async deleteJournal(journalId: number): Promise<void> {
+    const deleted = await this.repository.deleteJournal(journalId);
+    if (!deleted) throw new NotFoundError("仕訳が見つかりません。");
   }
 
   async getBalanceSheet(asOf: string) {

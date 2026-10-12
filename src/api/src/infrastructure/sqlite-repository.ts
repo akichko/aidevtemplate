@@ -3,6 +3,7 @@ import type { AccountingRepository } from "../application/repository.js";
 import {
   calculateBalanceSheet,
   calculateIncomeStatement,
+  journalMonthRange,
   type Account,
   type AccountCategory,
   type Journal,
@@ -133,14 +134,28 @@ export class SqliteAccountingRepository implements AccountingRepository {
     return result.changes === 0 ? null : { id: subaccountId, accountId, name: name.trim() };
   }
 
-  async listJournals(): Promise<Journal[]> {
-    const headers = this.database.prepare(
-      "SELECT id, entry_date, description FROM journal_entries ORDER BY entry_date DESC, id DESC",
-    ).all() as JournalRow[];
+  async listJournals(month?: string): Promise<Journal[]> {
+    const range = month ? journalMonthRange(month) : null;
+    const headers = this.database.prepare(`
+      SELECT id, entry_date, description FROM journal_entries
+      ${range ? "WHERE entry_date >= ? AND entry_date < ?" : ""}
+      ORDER BY entry_date DESC, id DESC
+    `).all(...(range ? [range.startDate, range.endDate] : [])) as JournalRow[];
     const lines = this.database.prepare(
       "SELECT id, journal_entry_id, account_id, side, amount FROM journal_lines ORDER BY id",
     ).all() as JournalLineRow[];
     return headers.map((header) => mapJournal(header, lines.filter((line) => line.journal_entry_id === header.id)));
+  }
+
+  async getJournal(journalId: number): Promise<Journal | null> {
+    const header = this.database.prepare(
+      "SELECT id, entry_date, description FROM journal_entries WHERE id = ?",
+    ).get(journalId) as JournalRow | undefined;
+    if (!header) return null;
+    const lines = this.database.prepare(
+      "SELECT id, journal_entry_id, account_id, side, amount FROM journal_lines WHERE journal_entry_id = ? ORDER BY id",
+    ).all(journalId) as JournalLineRow[];
+    return mapJournal(header, lines);
   }
 
   async createJournal(input: JournalInput): Promise<Journal> {
@@ -157,7 +172,29 @@ export class SqliteAccountingRepository implements AccountingRepository {
       return id;
     });
     const id = create();
-    return (await this.listJournals()).find((journal) => journal.id === id)!;
+    return (await this.getJournal(id))!;
+  }
+
+  async updateJournal(journalId: number, input: JournalInput): Promise<Journal | null> {
+    const update = this.database.prepare("UPDATE journal_entries SET entry_date = ?, description = ? WHERE id = ?");
+    const deleteLines = this.database.prepare("DELETE FROM journal_lines WHERE journal_entry_id = ?");
+    const insertLine = this.database.prepare(
+      "INSERT INTO journal_lines (journal_entry_id, account_id, side, amount) VALUES (?, ?, ?, ?)",
+    );
+    const save = this.database.transaction(() => {
+      const result = update.run(input.date, input.description.trim(), journalId);
+      if (result.changes === 0) return false;
+      deleteLines.run(journalId);
+      for (const line of input.lines) insertLine.run(journalId, line.accountId, line.side, line.amount);
+      return true;
+    });
+    return save() ? this.getJournal(journalId) : null;
+  }
+
+  async deleteJournal(journalId: number): Promise<boolean> {
+    const deleteEntry = this.database.prepare("DELETE FROM journal_entries WHERE id = ?");
+    const remove = this.database.transaction(() => deleteEntry.run(journalId).changes > 0);
+    return remove();
   }
 
   async getBalanceSheet(asOf: string) {

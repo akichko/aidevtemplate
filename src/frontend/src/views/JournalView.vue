@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { accountingApi, categoryLabels, yen, type Account, type Journal, type JournalLineInput } from "../api";
+import { accountingApi, categoryLabels, yen, type Account, type JournalLineInput } from "../api";
+
+const props = defineProps<{ mode: "create" | "edit"; journalId?: number }>();
+const emit = defineEmits<{ complete: [date: string]; cancel: [] }>();
 
 interface EntryRow {
   key: number;
@@ -14,11 +17,8 @@ const debitRows = ref<EntryRow[]>([newRow()]);
 const creditRows = ref<EntryRow[]>([newRow()]);
 const date = ref(new Date().toISOString().slice(0, 10));
 const description = ref("");
-const journals = ref<Journal[]>([]);
 const errorMessage = ref("");
-const toastMessage = ref("");
 const busy = ref(false);
-let toastTimer = 0;
 
 function newRow(): EntryRow {
   return { key: nextRowKey++, accountId: "", amount: "" };
@@ -33,20 +33,6 @@ function sumRows(rows: EntryRow[]): number {
   return rows.reduce((sum, row) => sum + (Number(row.amount) || 0), 0);
 }
 
-function notify(message: string) {
-  toastMessage.value = message;
-  window.clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => toastMessage.value = "", 2600);
-}
-
-function clearForm() {
-  date.value = new Date().toISOString().slice(0, 10);
-  description.value = "";
-  debitRows.value = [newRow()];
-  creditRows.value = [newRow()];
-  errorMessage.value = "";
-}
-
 function removeRow(side: "debit" | "credit", row: EntryRow) {
   const rows = side === "debit" ? debitRows : creditRows;
   if (rows.value.length === 1) {
@@ -58,10 +44,32 @@ function removeRow(side: "debit" | "credit", row: EntryRow) {
 }
 
 async function loadData() {
+  busy.value = true;
   try {
-    [accounts.value, journals.value] = await Promise.all([accountingApi.listAccounts(), accountingApi.listJournals()]);
+    accounts.value = await accountingApi.listAccounts();
+    if (props.mode === "edit") {
+      if (!props.journalId) throw new Error("編集する仕訳が指定されていません。");
+      const journal = await accountingApi.getJournal(props.journalId);
+      date.value = journal.date;
+      description.value = journal.description;
+      debitRows.value = journal.lines.filter((line) => line.side === "debit").map((line) => ({
+        key: nextRowKey++,
+        accountId: String(line.accountId),
+        amount: String(line.amount),
+      }));
+      creditRows.value = journal.lines.filter((line) => line.side === "credit").map((line) => ({
+        key: nextRowKey++,
+        accountId: String(line.accountId),
+        amount: String(line.amount),
+      }));
+      if (debitRows.value.length === 0) debitRows.value = [newRow()];
+      if (creditRows.value.length === 0) creditRows.value = [newRow()];
+    }
+    errorMessage.value = "";
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : "データを読み込めませんでした。";
+  } finally {
+    busy.value = false;
   }
 }
 
@@ -89,12 +97,13 @@ async function submitJournal() {
   }
   busy.value = true;
   try {
-    await accountingApi.createJournal({ date: date.value, description: description.value.trim(), lines });
-    await loadData();
-    clearForm();
-    notify("仕訳を登録しました");
+    const input = { date: date.value, description: description.value.trim(), lines };
+    const saved = props.mode === "edit" && props.journalId
+      ? await accountingApi.updateJournal(props.journalId, input)
+      : await accountingApi.createJournal(input);
+    emit("complete", saved.date);
   } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : "仕訳を登録できませんでした。";
+    errorMessage.value = error instanceof Error ? error.message : "仕訳を保存できませんでした。";
   } finally {
     busy.value = false;
   }
@@ -106,7 +115,7 @@ onMounted(loadData);
 <template>
   <div class="page-inner">
     <div class="breadcrumb"><span>会計</span><span aria-hidden="true">/</span><strong>仕訳登録</strong></div>
-    <div class="page-heading"><div><p class="eyebrow">日々の記帳</p><h1>仕訳登録</h1><p class="subtitle">取引を借方・貸方に分けて記録します。</p></div><span class="panel-note">入力内容はSQLiteに保存されます</span></div>
+    <div class="page-heading"><div><p class="eyebrow">日々の記帳</p><h1>{{ mode === "edit" ? "仕訳編集" : "仕訳登録" }}</h1><p class="subtitle">取引を借方・貸方に分けて記録します。</p></div><span class="panel-note">入力内容はSQLiteに保存されます</span></div>
 
     <form class="panel form-panel" @submit.prevent="submitJournal">
       <div class="form-top">
@@ -147,16 +156,8 @@ onMounted(loadData);
         <div class="balance-item"><span class="balance-label">貸方合計</span><strong class="balance-value">¥{{ yen.format(creditTotal) }}</strong></div>
         <div class="balance-status" :class="{ 'is-balanced': balanced, 'is-unbalanced': !balanced && (debitTotal || creditTotal) }">{{ balanceStatus }}</div>
       </div>
-      <div class="form-footer"><p v-if="errorMessage" class="inline-error" role="alert">{{ errorMessage }}</p><button class="button secondary" type="button" @click="clearForm">入力をクリア</button><button class="button" type="submit" :disabled="!balanced || busy">{{ busy ? "登録中…" : "仕訳を登録" }}</button></div>
+      <div class="form-footer"><p v-if="errorMessage" class="inline-error" role="alert">{{ errorMessage }}</p><button class="button secondary" type="button" @click="emit('cancel')">{{ mode === "edit" ? "変更を破棄" : "キャンセル" }}</button><button class="button" type="submit" :disabled="!balanced || busy">{{ busy ? "保存中…" : mode === "edit" ? "変更を保存" : "仕訳を登録" }}</button></div>
     </form>
 
-    <section class="panel recent-panel" aria-labelledby="recent-heading">
-      <div class="panel-head"><h2 class="panel-title" id="recent-heading">登録済み仕訳</h2><span class="panel-note">{{ journals.length }} 件</span></div>
-      <div class="table-scroll"><table><thead><tr><th>取引日</th><th>摘要</th><th class="right">借方合計</th><th class="right">貸方合計</th></tr></thead><tbody>
-        <tr v-for="journal in journals.slice(0, 10)" :key="journal.id"><td>{{ journal.date }}</td><td>{{ journal.description }}</td><td class="right">{{ yen.format(journal.debitTotal) }} 円</td><td class="right">{{ yen.format(journal.creditTotal) }} 円</td></tr>
-        <tr v-if="journals.length === 0"><td class="empty-row" colspan="4">登録した仕訳はありません</td></tr>
-      </tbody></table></div>
-    </section>
-    <div v-if="toastMessage" class="toast" role="status">{{ toastMessage }}</div>
   </div>
 </template>

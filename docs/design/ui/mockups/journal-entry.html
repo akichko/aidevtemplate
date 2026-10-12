@@ -3,15 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>仕訳登録 | 帳務</title>
+  <title>仕訳登録・編集 | 帳務</title>
   <link rel="stylesheet" href="mockup.css">
 </head>
 <body>
   <main class="mock-page">
     <div class="mock-page-inner">
-      <div class="breadcrumb"><span>会計</span><span aria-hidden="true">/</span><strong>仕訳登録</strong></div>
+      <div class="breadcrumb"><a href="journal-list.html">仕訳一覧へ戻る</a><span aria-hidden="true">/</span><strong>仕訳登録・編集</strong></div>
       <div class="page-heading">
-        <div><p class="eyebrow">DAILY BOOKKEEPING</p><h1>仕訳登録</h1><p class="subtitle">取引を借方・貸方に分けて記録します。</p></div>
+        <div><p class="eyebrow">DAILY BOOKKEEPING</p><h1>仕訳登録・編集</h1><p class="subtitle">新規登録または仕訳一覧から選択した仕訳を編集します。</p></div>
         <span class="panel-note">入力内容はこのブラウザー内のデモです</span>
       </div>
 
@@ -40,8 +40,8 @@
         </div>
         <div class="form-footer">
           <span class="inline-error" id="journal-error" role="alert"></span>
-          <button class="button secondary" type="reset">入力をクリア</button>
-          <button class="button" id="submit-journal" type="submit" disabled>仕訳を登録</button>
+          <a class="button secondary" href="journal-list.html">キャンセル</a>
+          <button class="button" id="submit-journal" type="submit" disabled>登録・変更を保存</button>
         </div>
       </form>
 

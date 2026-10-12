@@ -3,6 +3,7 @@ import {
   calculateBalanceSheet,
   calculateIncomeStatement,
   validateJournalInput,
+  validateJournalMonth,
   type Account,
   type Journal,
 } from "./accounting.js";
@@ -73,6 +74,18 @@ describe("仕訳検証", () => {
         { accountId: 3, side: "credit", amount: 100 },
       ],
     })).toThrow("有効な取引日を入力してください。");
+  });
+});
+
+describe("対象年月検証", () => {
+  it("YYYY-MM形式の有効な月を受け入れる", () => {
+    expect(() => validateJournalMonth("2026-01")).not.toThrow();
+    expect(() => validateJournalMonth("2026-12")).not.toThrow();
+  });
+
+  it("不正な年月を拒否する", () => {
+    expect(() => validateJournalMonth("2026-13")).toThrow("対象年月をYYYY-MM形式で指定してください。");
+    expect(() => validateJournalMonth("2026-1")).toThrow("対象年月をYYYY-MM形式で指定してください。");
   });
 });
 

@@ -85,6 +85,22 @@ export function validateSubaccountName(name: unknown): asserts name is string {
   }
 }
 
+export function validateJournalMonth(month: unknown): asserts month is string {
+  if (typeof month !== "string" || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+    throw new DomainError("対象年月をYYYY-MM形式で指定してください。", "INVALID_JOURNAL_MONTH");
+  }
+}
+
+export function journalMonthRange(month: string): { startDate: string; endDate: string } {
+  const [year, monthNumber] = month.split("-").map(Number);
+  const nextYear = monthNumber === 12 ? year + 1 : year;
+  const nextMonth = monthNumber === 12 ? 1 : monthNumber + 1;
+  return {
+    startDate: `${month}-01`,
+    endDate: `${String(nextYear).padStart(4, "0")}-${String(nextMonth).padStart(2, "0")}-01`,
+  };
+}
+
 export function validateJournalInput(input: JournalInput): { debitTotal: number; creditTotal: number } {
   if (!isValidDate(input.date)) {
     throw new DomainError("有効な取引日を入力してください。", "INVALID_JOURNAL_DATE");

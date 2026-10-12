@@ -28,11 +28,21 @@ export function createRouter(service: AccountingService): Router {
       request.body,
     ));
   }));
-  router.get("/journals", asyncRoute(async (_request, response) => {
-    response.json(await service.listJournals());
+  router.get("/journals", asyncRoute(async (request, response) => {
+    response.json(await service.listJournals(request.query.month));
   }));
   router.post("/journals", asyncRoute(async (request, response) => {
     response.status(201).json(await service.createJournal(request.body));
+  }));
+  router.get("/journals/:journalId", asyncRoute(async (request, response) => {
+    response.json(await service.getJournal(parseId(request.params.journalId)));
+  }));
+  router.put("/journals/:journalId", asyncRoute(async (request, response) => {
+    response.json(await service.updateJournal(parseId(request.params.journalId), request.body));
+  }));
+  router.delete("/journals/:journalId", asyncRoute(async (request, response) => {
+    await service.deleteJournal(parseId(request.params.journalId));
+    response.status(204).end();
   }));
   router.get("/reports/balance-sheet", asyncRoute(async (request, response) => {
     response.json(await service.getBalanceSheet(stringQuery(request.query.asOf) ?? ""));

@@ -60,6 +60,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const payload = await response.json().catch(() => null) as { error?: { message?: string } } | null;
     throw new Error(payload?.error?.message ?? "処理に失敗しました。時間をおいて再度お試しください。");
   }
+  if (response.status === 204) return undefined as T;
   return response.json() as Promise<T>;
 }
 
@@ -89,11 +90,20 @@ export const accountingApi = {
       body: JSON.stringify({ name }),
     });
   },
-  listJournals() {
-    return request<Journal[]>("/journals");
+  listJournals(month: string) {
+    return request<Journal[]>(`/journals?month=${encodeURIComponent(month)}`);
+  },
+  getJournal(id: number) {
+    return request<Journal>(`/journals/${id}`);
   },
   createJournal(input: { date: string; description: string; lines: JournalLineInput[] }) {
     return request<Journal>("/journals", { method: "POST", body: JSON.stringify(input) });
+  },
+  updateJournal(id: number, input: { date: string; description: string; lines: JournalLineInput[] }) {
+    return request<Journal>(`/journals/${id}`, { method: "PUT", body: JSON.stringify(input) });
+  },
+  deleteJournal(id: number) {
+    return request<void>(`/journals/${id}`, { method: "DELETE" });
   },
   getBalanceSheet(asOf: string) {
     return request<BalanceSheet>(`/reports/balance-sheet?asOf=${encodeURIComponent(asOf)}`);

@@ -9,4 +9,12 @@
 | journal_entries | `id`, `entry_date`, `description`, `created_at` | 仕訳ヘッダー。仕訳明細を2件以上持つ。 |
 | journal_lines | `id`, `journal_entry_id`, `account_id`, `side`, `amount` | `journal_entry_id` と `account_id` は外部キー。`side` は `debit` / `credit`、`amount` は正の整数。 |
 
-補助科目を仕訳明細へ記録するかは未確定のため、`journal_lines` に補助科目列は設けない。名前の最大長・一意性、更新履歴、論理削除、DBマイグレーション方式は未確定。借貸一致はアプリケーションのトランザクション内で検証してから保存する。
+## 仕訳の変更・削除
+
+- 仕訳変更時は、仕訳ヘッダーと全明細を同一トランザクションで更新し、変更後の借方・貸方一致を検証する。
+- 仕訳削除は利用者の確認後にヘッダーと全明細を同一トランザクションで物理削除し、アプリケーションから復元できない（[ADR-003](../../architecture/decisions/ADR-003-journal-deletion.md)）。
+- 監査証跡とバックアップ保持期間はOPEN-DOM-006で別途確認する。
+
+## 未確定事項
+
+補助科目を仕訳明細へ記録するかは未確定のため、`journal_lines` に補助科目列は設けない。勘定科目・補助科目名の最大長と一意性、更新履歴、DBマイグレーション方式も未確定とする。

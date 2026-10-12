@@ -1,12 +1,25 @@
-# Integration Test Strategy
+# 結合テスト方針
 
-検証対象:
-- Frontend / API
-- API / Application
-- Application / Repository
-- Repository / DB
-- External Service
-- Authentication / Authorization
+## 検証対象
 
-環境:
-TODO
+- Vue画面からExpress APIを呼び出し、結果・エラーを表示する連携。
+- API、アプリケーションサービス、リポジトリIFの連携。
+- SQLiteアダプターによる仕訳・明細・勘定科目の永続化。
+- 仕訳一覧から登録・編集・削除し、財務諸表へ反映する一連の業務フロー。
+
+## 環境
+
+- フロントエンドとAPIをローカル起動する。
+- `SQLITE_PATH`を一時ディレクトリに向け、利用者の開発DBと分離する。
+- Playwrightで画面操作を行い、API応答とDB結果を検証する。
+- SQL Serverアダプターの同一契約検証は、接続可能なSQL Server環境がある場合に追加実行する。実DB接続環境は現時点で未提供。
+
+## 完了条件
+
+- 正常系だけでなく、入力エラー、対象なし、削除キャンセル、DB/API失敗時の表示を確認する。
+- 前月・翌月の年跨ぎ、編集保存後の年月変更、削除後の帳票除外を確認する。
+- テスト用SQLiteを破棄し、開発用データへ影響しない。
+
+## シナリオ
+
+- [IT-001 会計画面・API・SQLite業務フロー](IT-001-accounting-workflow.md)
