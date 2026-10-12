@@ -6,4 +6,4 @@
 - [Data Architecture](data-architecture.md)
 - [Security](security.md)
 - [Deployment](deployment.md)
-- [ADR](decisions/)
+- [ADR](decisions/index.md)
