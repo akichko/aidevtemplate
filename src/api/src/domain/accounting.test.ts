@@ -54,6 +54,36 @@ describe("仕訳検証", () => {
     })).toEqual({ debitTotal: 1_000, creditTotal: 1_000 });
   });
 
+  it("補助科目IDを省略または正の整数で指定できる", () => {
+    expect(validateJournalInput({
+      date: "2026-04-01",
+      description: "補助科目あり",
+      lines: [
+        { accountId: 1, subaccountId: 10, side: "debit", amount: 1_000 },
+        { accountId: 3, side: "credit", amount: 1_000 },
+      ],
+    })).toEqual({ debitTotal: 1_000, creditTotal: 1_000 });
+    expect(() => validateJournalInput({
+      date: "2026-04-01",
+      description: "補助科目なし",
+      lines: [
+        { accountId: 1, side: "debit", amount: 1_000 },
+        { accountId: 3, side: "credit", amount: 1_000 },
+      ],
+    })).not.toThrow();
+  });
+
+  it.each([0, -1, 1.5])("不正な補助科目ID %s を拒否する", (subaccountId) => {
+    expect(() => validateJournalInput({
+      date: "2026-04-01",
+      description: "不正な補助科目",
+      lines: [
+        { accountId: 1, subaccountId, side: "debit", amount: 1_000 },
+        { accountId: 3, side: "credit", amount: 1_000 },
+      ],
+    })).toThrow(expect.objectContaining({ code: "INVALID_SUBACCOUNT_ID" }));
+  });
+
   it("貸借不一致を拒否する", () => {
     expect(() => validateJournalInput({
       date: "2026-04-01",

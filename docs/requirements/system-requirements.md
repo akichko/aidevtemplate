@@ -22,6 +22,5 @@
 - SQL Serverのバージョン。
 - Node.jsのサポート対象バージョンとパッケージのバージョン更新方針。
 - Playwrightで自動化するテストの範囲と実行環境。
-- 仕訳明細で補助科目を選択できるか。
 
 データベースの選択と共通インターフェースは [ADR-001](../architecture/decisions/ADR-001-database-adapters.md) を参照する。Azureの詳細設計は本書の対象外とする。

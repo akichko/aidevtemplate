@@ -2,9 +2,9 @@
 
 ## 対象
 
-- ドメイン: 仕訳入力検証、年月検証、貸借一致、貸借対照表・損益計算書の計算。
+- ドメイン: 仕訳入力検証（補助科目IDを含む）、年月検証、貸借一致、貸借対照表・損益計算書の計算。
 - アプリケーション: 月別一覧、仕訳登録・編集・削除のユースケースと入力検証。
-- リポジトリ: SQLiteのCRUD、月境界検索、明細とのトランザクション、削除後の集計除外。
+- リポジトリ: SQLiteのCRUD、月境界検索、明細とのトランザクション、補助科目の保存・親子制約・既存DB移行、削除後の集計除外。
 
 ## ケース設計
 
@@ -20,8 +20,8 @@
 
 | 仕様書 | 対象コード | テスト数 |
 |---|---|---:|
-| [UT-001 会計ドメイン](UT-001-accounting-domain.md) | `src/api/src/domain/accounting.test.ts` | 8 |
-| [UT-002 SQLiteリポジトリ](UT-002-sqlite-repository.md) | `src/api/src/infrastructure/sqlite-repository.test.ts` | 2 |
-| [UT-003 アプリケーションサービス](UT-003-accounting-service.md) | `src/api/src/application/accounting-service.test.ts` | 1 |
+| [UT-001 会計ドメイン](UT-001-accounting-domain.md) | `src/api/src/domain/accounting.test.ts` | 12 |
+| [UT-002 SQLiteリポジトリ](UT-002-sqlite-repository.md) | `src/api/src/infrastructure/sqlite-repository.test.ts` | 4 |
+| [UT-003 アプリケーションサービス](UT-003-accounting-service.md) | `src/api/src/application/accounting-service.test.ts` | 2 |
 
-実装済み単体テストは合計11件。結合テストは[IT-001](../integration/IT-001-accounting-workflow.md)で設計し、自動化は未実装。
+実装済み単体テストは合計18件。結合テストは[IT-001](../integration/IT-001-accounting-workflow.md)で設計し、自動化は未実装。

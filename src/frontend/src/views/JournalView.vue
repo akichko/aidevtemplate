@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { accountingApi, categoryLabels, yen, type Account, type JournalLineInput } from "../api";
+import { accountingApi, categoryLabels, yen, type Account, type JournalLineInput, type Subaccount } from "../api";
 
 const props = defineProps<{ mode: "create" | "edit"; journalId?: number }>();
 const emit = defineEmits<{ complete: [date: string]; cancel: [] }>();
@@ -8,10 +8,13 @@ const emit = defineEmits<{ complete: [date: string]; cancel: [] }>();
 interface EntryRow {
   key: number;
   accountId: string;
+  subaccountId: string;
+  subaccounts: Subaccount[];
   amount: string;
 }
 
 let nextRowKey = 1;
+const subaccountsByAccount = new Map<number, Promise<Subaccount[]>>();
 const accounts = ref<Account[]>([]);
 const debitRows = ref<EntryRow[]>([newRow()]);
 const creditRows = ref<EntryRow[]>([newRow()]);
@@ -21,7 +24,7 @@ const errorMessage = ref("");
 const busy = ref(false);
 
 function newRow(): EntryRow {
-  return { key: nextRowKey++, accountId: "", amount: "" };
+  return { key: nextRowKey++, accountId: "", subaccountId: "", subaccounts: [], amount: "" };
 }
 
 const debitTotal = computed(() => sumRows(debitRows.value));
@@ -37,9 +40,44 @@ function removeRow(side: "debit" | "credit", row: EntryRow) {
   const rows = side === "debit" ? debitRows : creditRows;
   if (rows.value.length === 1) {
     row.accountId = "";
+    row.subaccountId = "";
+    row.subaccounts = [];
     row.amount = "";
   } else {
     rows.value = rows.value.filter((item) => item.key !== row.key);
+  }
+}
+
+async function loadSubaccounts(row: EntryRow, preserveSelection = false) {
+  const accountId = Number(row.accountId);
+  if (!Number.isSafeInteger(accountId) || accountId <= 0) return;
+  let subaccountsRequest = subaccountsByAccount.get(accountId);
+  if (!subaccountsRequest) {
+    subaccountsRequest = accountingApi.getAccount(accountId).then((account) => account.subaccounts);
+    subaccountsByAccount.set(accountId, subaccountsRequest);
+  }
+  try {
+    const subaccounts = await subaccountsRequest;
+    if (row.accountId !== String(accountId)) return;
+    row.subaccounts = subaccounts;
+    if (preserveSelection && row.subaccountId && !subaccounts.some((item) => item.id === Number(row.subaccountId))) {
+      row.subaccountId = "";
+    }
+  } catch (error) {
+    if (subaccountsByAccount.get(accountId) === subaccountsRequest) subaccountsByAccount.delete(accountId);
+    throw error;
+  }
+}
+
+async function onAccountChange(row: EntryRow) {
+  row.subaccountId = "";
+  row.subaccounts = [];
+  if (!row.accountId) return;
+  try {
+    await loadSubaccounts(row);
+    errorMessage.value = "";
+  } catch (error) {
+    errorMessage.value = error instanceof Error ? error.message : "補助科目を読み込めませんでした。";
   }
 }
 
@@ -55,15 +93,20 @@ async function loadData() {
       debitRows.value = journal.lines.filter((line) => line.side === "debit").map((line) => ({
         key: nextRowKey++,
         accountId: String(line.accountId),
+        subaccountId: line.subaccountId === undefined ? "" : String(line.subaccountId),
+        subaccounts: [],
         amount: String(line.amount),
       }));
       creditRows.value = journal.lines.filter((line) => line.side === "credit").map((line) => ({
         key: nextRowKey++,
         accountId: String(line.accountId),
+        subaccountId: line.subaccountId === undefined ? "" : String(line.subaccountId),
+        subaccounts: [],
         amount: String(line.amount),
       }));
       if (debitRows.value.length === 0) debitRows.value = [newRow()];
       if (creditRows.value.length === 0) creditRows.value = [newRow()];
+      await Promise.all([...debitRows.value, ...creditRows.value].map((row) => loadSubaccounts(row, true)));
     }
     errorMessage.value = "";
   } catch (error) {
@@ -88,7 +131,16 @@ async function submitJournal() {
         errorMessage.value = "各明細の勘定科目と1円以上の金額を入力してください。";
         return;
       }
-      lines.push({ accountId: Number(row.accountId), side, amount });
+      const line: JournalLineInput = { accountId: Number(row.accountId), side, amount };
+      if (row.subaccountId) {
+        const subaccountId = Number(row.subaccountId);
+        if (!Number.isSafeInteger(subaccountId) || !row.subaccounts.some((item) => item.id === subaccountId && item.accountId === line.accountId)) {
+          errorMessage.value = "選択した補助科目を確認してください。";
+          return;
+        }
+        line.subaccountId = subaccountId;
+      }
+      lines.push(line);
     }
   }
   if (!balanced.value) {
@@ -129,7 +181,9 @@ onMounted(loadData);
           <div v-for="(row, index) in debitRows" :key="row.key" class="entry-row">
             <span class="row-index" aria-hidden="true">{{ index + 1 }}</span>
             <label class="sr-only" :for="`debit-account-${row.key}`">借方勘定科目</label>
-            <select :id="`debit-account-${row.key}`" v-model="row.accountId" class="control account-select"><option value="">勘定科目を選択</option><option v-for="account in accounts" :key="account.id" :value="String(account.id)">{{ account.name }}（{{ categoryLabels[account.category] }}）</option></select>
+            <select :id="`debit-account-${row.key}`" v-model="row.accountId" class="control account-select" @change="onAccountChange(row)"><option value="">勘定科目を選択</option><option v-for="account in accounts" :key="account.id" :value="String(account.id)">{{ account.name }}（{{ categoryLabels[account.category] }}）</option></select>
+            <label class="sr-only" :for="`debit-subaccount-${row.key}`">借方補助科目</label>
+            <select :id="`debit-subaccount-${row.key}`" v-model="row.subaccountId" class="control subaccount-select" :disabled="!row.accountId || row.subaccounts.length === 0"><option value="">補助科目なし</option><option v-for="subaccount in row.subaccounts" :key="subaccount.id" :value="String(subaccount.id)">{{ subaccount.name }}</option></select>
             <div class="amount-wrap"><label class="sr-only" :for="`debit-amount-${row.key}`">借方金額</label><input :id="`debit-amount-${row.key}`" v-model="row.amount" class="control amount-input" type="text" inputmode="numeric" pattern="[1-9][0-9]*" placeholder="金額"><span class="currency">円</span></div>
             <button class="remove-row" type="button" :aria-label="`借方明細${index + 1}を削除`" @click="removeRow('debit', row)">×</button>
           </div>
@@ -143,7 +197,9 @@ onMounted(loadData);
           <div v-for="(row, index) in creditRows" :key="row.key" class="entry-row">
             <span class="row-index" aria-hidden="true">{{ index + 1 }}</span>
             <label class="sr-only" :for="`credit-account-${row.key}`">貸方勘定科目</label>
-            <select :id="`credit-account-${row.key}`" v-model="row.accountId" class="control account-select"><option value="">勘定科目を選択</option><option v-for="account in accounts" :key="account.id" :value="String(account.id)">{{ account.name }}（{{ categoryLabels[account.category] }}）</option></select>
+            <select :id="`credit-account-${row.key}`" v-model="row.accountId" class="control account-select" @change="onAccountChange(row)"><option value="">勘定科目を選択</option><option v-for="account in accounts" :key="account.id" :value="String(account.id)">{{ account.name }}（{{ categoryLabels[account.category] }}）</option></select>
+            <label class="sr-only" :for="`credit-subaccount-${row.key}`">貸方補助科目</label>
+            <select :id="`credit-subaccount-${row.key}`" v-model="row.subaccountId" class="control subaccount-select" :disabled="!row.accountId || row.subaccounts.length === 0"><option value="">補助科目なし</option><option v-for="subaccount in row.subaccounts" :key="subaccount.id" :value="String(subaccount.id)">{{ subaccount.name }}</option></select>
             <div class="amount-wrap"><label class="sr-only" :for="`credit-amount-${row.key}`">貸方金額</label><input :id="`credit-amount-${row.key}`" v-model="row.amount" class="control amount-input" type="text" inputmode="numeric" pattern="[1-9][0-9]*" placeholder="金額"><span class="currency">円</span></div>
             <button class="remove-row" type="button" :aria-label="`貸方明細${index + 1}を削除`" @click="removeRow('credit', row)">×</button>
           </div>

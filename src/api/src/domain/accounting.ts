@@ -19,6 +19,7 @@ export interface Subaccount {
 
 export interface JournalLineInput {
   accountId: number;
+  subaccountId?: number;
   side: Side;
   amount: number;
 }
@@ -116,6 +117,9 @@ export function validateJournalInput(input: JournalInput): { debitTotal: number;
   for (const line of input.lines) {
     if (!Number.isSafeInteger(line.accountId) || line.accountId <= 0) {
       throw new DomainError("勘定科目を選択してください。", "INVALID_ACCOUNT_ID");
+    }
+    if (line.subaccountId !== undefined && (!Number.isSafeInteger(line.subaccountId) || line.subaccountId <= 0)) {
+      throw new DomainError("補助科目が不正です。", "INVALID_SUBACCOUNT_ID");
     }
     if (line.side !== "debit" && line.side !== "credit") {
       throw new DomainError("借方または貸方を指定してください。", "INVALID_JOURNAL_SIDE");

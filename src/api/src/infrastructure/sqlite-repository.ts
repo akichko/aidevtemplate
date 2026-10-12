@@ -34,6 +34,7 @@ interface JournalLineRow {
   id: number;
   journal_entry_id: number;
   account_id: number;
+  subaccount_id: number | null;
   side: "debit" | "credit";
   amount: number;
 }
@@ -69,12 +70,38 @@ export class SqliteAccountingRepository implements AccountingRepository {
         id INTEGER PRIMARY KEY,
         journal_entry_id INTEGER NOT NULL REFERENCES journal_entries(id) ON DELETE CASCADE,
         account_id INTEGER NOT NULL REFERENCES accounts(id),
+        subaccount_id INTEGER,
         side TEXT NOT NULL CHECK (side IN ('debit', 'credit')),
-        amount INTEGER NOT NULL CHECK (amount > 0)
+        amount INTEGER NOT NULL CHECK (amount > 0),
+        FOREIGN KEY (account_id, subaccount_id) REFERENCES subaccounts(account_id, id)
       );
       CREATE INDEX IF NOT EXISTS ix_journal_entries_date ON journal_entries(entry_date);
-      CREATE INDEX IF NOT EXISTS ix_journal_lines_account ON journal_lines(account_id);
     `);
+    this.database.exec(
+      "CREATE UNIQUE INDEX IF NOT EXISTS ux_subaccounts_account_id_id ON subaccounts(account_id, id)",
+    );
+    const lineColumns = this.database.pragma("table_info(journal_lines)") as Array<{ name: string }>;
+    if (!lineColumns.some((column) => column.name === "subaccount_id")) {
+      const migrate = this.database.transaction(() => {
+        this.database.exec(`
+          CREATE TABLE journal_lines_new (
+            id INTEGER PRIMARY KEY,
+            journal_entry_id INTEGER NOT NULL REFERENCES journal_entries(id) ON DELETE CASCADE,
+            account_id INTEGER NOT NULL REFERENCES accounts(id),
+            subaccount_id INTEGER,
+            side TEXT NOT NULL CHECK (side IN ('debit', 'credit')),
+            amount INTEGER NOT NULL CHECK (amount > 0),
+            FOREIGN KEY (account_id, subaccount_id) REFERENCES subaccounts(account_id, id)
+          );
+          INSERT INTO journal_lines_new (id, journal_entry_id, account_id, side, amount)
+            SELECT id, journal_entry_id, account_id, side, amount FROM journal_lines;
+          DROP TABLE journal_lines;
+          ALTER TABLE journal_lines_new RENAME TO journal_lines;
+        `);
+      });
+      migrate();
+    }
+    this.database.exec("CREATE INDEX IF NOT EXISTS ix_journal_lines_account ON journal_lines(account_id)");
   }
 
   async close(): Promise<void> {
@@ -142,7 +169,7 @@ export class SqliteAccountingRepository implements AccountingRepository {
       ORDER BY entry_date DESC, id DESC
     `).all(...(range ? [range.startDate, range.endDate] : [])) as JournalRow[];
     const lines = this.database.prepare(
-      "SELECT id, journal_entry_id, account_id, side, amount FROM journal_lines ORDER BY id",
+      "SELECT id, journal_entry_id, account_id, subaccount_id, side, amount FROM journal_lines ORDER BY id",
     ).all() as JournalLineRow[];
     return headers.map((header) => mapJournal(header, lines.filter((line) => line.journal_entry_id === header.id)));
   }
@@ -153,7 +180,7 @@ export class SqliteAccountingRepository implements AccountingRepository {
     ).get(journalId) as JournalRow | undefined;
     if (!header) return null;
     const lines = this.database.prepare(
-      "SELECT id, journal_entry_id, account_id, side, amount FROM journal_lines WHERE journal_entry_id = ? ORDER BY id",
+      "SELECT id, journal_entry_id, account_id, subaccount_id, side, amount FROM journal_lines WHERE journal_entry_id = ? ORDER BY id",
     ).all(journalId) as JournalLineRow[];
     return mapJournal(header, lines);
   }
@@ -163,12 +190,12 @@ export class SqliteAccountingRepository implements AccountingRepository {
       "INSERT INTO journal_entries (entry_date, description) VALUES (?, ?)",
     );
     const insertLine = this.database.prepare(
-      "INSERT INTO journal_lines (journal_entry_id, account_id, side, amount) VALUES (?, ?, ?, ?)",
+      "INSERT INTO journal_lines (journal_entry_id, account_id, subaccount_id, side, amount) VALUES (?, ?, ?, ?, ?)",
     );
     const create = this.database.transaction(() => {
       const result = insertEntry.run(input.date, input.description.trim());
       const id = Number(result.lastInsertRowid);
-      for (const line of input.lines) insertLine.run(id, line.accountId, line.side, line.amount);
+      for (const line of input.lines) insertLine.run(id, line.accountId, line.subaccountId ?? null, line.side, line.amount);
       return id;
     });
     const id = create();
@@ -179,13 +206,13 @@ export class SqliteAccountingRepository implements AccountingRepository {
     const update = this.database.prepare("UPDATE journal_entries SET entry_date = ?, description = ? WHERE id = ?");
     const deleteLines = this.database.prepare("DELETE FROM journal_lines WHERE journal_entry_id = ?");
     const insertLine = this.database.prepare(
-      "INSERT INTO journal_lines (journal_entry_id, account_id, side, amount) VALUES (?, ?, ?, ?)",
+      "INSERT INTO journal_lines (journal_entry_id, account_id, subaccount_id, side, amount) VALUES (?, ?, ?, ?, ?)",
     );
     const save = this.database.transaction(() => {
       const result = update.run(input.date, input.description.trim(), journalId);
       if (result.changes === 0) return false;
       deleteLines.run(journalId);
-      for (const line of input.lines) insertLine.run(journalId, line.accountId, line.side, line.amount);
+      for (const line of input.lines) insertLine.run(journalId, line.accountId, line.subaccountId ?? null, line.side, line.amount);
       return true;
     });
     return save() ? this.getJournal(journalId) : null;
@@ -214,7 +241,12 @@ function mapSubaccount(row: SubaccountRow): Subaccount {
 }
 
 function mapJournal(header: JournalRow, rows: JournalLineRow[]): Journal {
-  const lines = rows.map((row) => ({ accountId: row.account_id, side: row.side, amount: row.amount }));
+  const lines = rows.map((row) => ({
+    accountId: row.account_id,
+    ...(row.subaccount_id === null ? {} : { subaccountId: row.subaccount_id }),
+    side: row.side,
+    amount: row.amount,
+  }));
   return {
     id: header.id,
     date: header.entry_date,

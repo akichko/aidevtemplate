@@ -16,6 +16,7 @@ export interface Account {
 
 export interface JournalLineInput {
   accountId: number;
+  subaccountId?: number;
   side: "debit" | "credit";
   amount: number;
 }

@@ -1,12 +1,19 @@
 import { afterEach, describe, expect, it } from "vitest";
+import Database from "better-sqlite3";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { SqliteAccountingRepository } from "./sqlite-repository.js";
 
 describe("SQLite会計リポジトリ", () => {
   let repository: SqliteAccountingRepository | undefined;
+  let temporaryDirectory: string | undefined;
 
   afterEach(async () => {
     await repository?.close();
     repository = undefined;
+    if (temporaryDirectory) rmSync(temporaryDirectory, { recursive: true, force: true });
+    temporaryDirectory = undefined;
   });
 
   it("勘定科目・補助科目・仕訳を永続化し、財務諸表を返す", async () => {
@@ -86,5 +93,89 @@ describe("SQLite会計リポジトリ", () => {
     expect(await repository.deleteJournal(march.id)).toBe(true);
     expect((await repository.getBalanceSheet("2026-04-30")).totals).toEqual({ assets: 0, liabilities: 0, equity: 0 });
     expect((await repository.getIncomeStatement("2026-03-01", "2026-04-30")).totals).toEqual({ revenues: 0, expenses: 0, netIncome: 0 });
+  });
+
+  it("補助科目を仕訳明細に保存・取得し、更新で解除できる", async () => {
+    repository = new SqliteAccountingRepository(":memory:");
+    await repository.initialize();
+    const cash = await repository.createAccount({ name: "現金", category: "asset" });
+    const bank = await repository.createAccount({ name: "普通預金", category: "asset" });
+    const capital = await repository.createAccount({ name: "資本金", category: "equity" });
+    const cashSubaccount = await repository.createSubaccount(cash.id, "小口現金");
+    const bankSubaccount = await repository.createSubaccount(bank.id, "当座預金");
+    if (!cashSubaccount || !bankSubaccount) throw new Error("補助科目を作成できませんでした。");
+
+    const journal = await repository.createJournal({
+      date: "2026-04-01",
+      description: "小口現金への入金",
+      lines: [
+        { accountId: cash.id, subaccountId: cashSubaccount.id, side: "debit", amount: 500 },
+        { accountId: capital.id, side: "credit", amount: 500 },
+      ],
+    });
+    expect(journal.lines[0]).toMatchObject({ accountId: cash.id, subaccountId: cashSubaccount.id });
+    expect((await repository.listJournals("2026-04"))[0].lines[0]).toMatchObject({ subaccountId: cashSubaccount.id });
+
+    const updated = await repository.updateJournal(journal.id, {
+      date: journal.date,
+      description: journal.description,
+      lines: [
+        { accountId: cash.id, side: "debit", amount: 500 },
+        { accountId: capital.id, side: "credit", amount: 500 },
+      ],
+    });
+    expect(updated?.lines[0]).not.toHaveProperty("subaccountId");
+
+    await expect(repository.createJournal({
+      date: "2026-04-02",
+      description: "勘定科目と異なる補助科目",
+      lines: [
+        { accountId: cash.id, subaccountId: bankSubaccount.id, side: "debit", amount: 100 },
+        { accountId: capital.id, side: "credit", amount: 100 },
+      ],
+    })).rejects.toThrow();
+    expect(await repository.listJournals("2026-04")).toHaveLength(1);
+  });
+
+  it("補助科目列のない既存SQLiteデータを維持して移行する", async () => {
+    temporaryDirectory = mkdtempSync(join(tmpdir(), "accounting-migration-"));
+    const databasePath = join(temporaryDirectory, "legacy.sqlite");
+    const legacy = new Database(databasePath);
+    legacy.exec(`
+      CREATE TABLE accounts (id INTEGER PRIMARY KEY, name TEXT NOT NULL, category TEXT NOT NULL);
+      CREATE TABLE subaccounts (id INTEGER PRIMARY KEY, account_id INTEGER NOT NULL REFERENCES accounts(id), name TEXT NOT NULL);
+      CREATE TABLE journal_entries (id INTEGER PRIMARY KEY, entry_date TEXT NOT NULL, description TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+      CREATE TABLE journal_lines (
+        id INTEGER PRIMARY KEY,
+        journal_entry_id INTEGER NOT NULL REFERENCES journal_entries(id) ON DELETE CASCADE,
+        account_id INTEGER NOT NULL REFERENCES accounts(id),
+        side TEXT NOT NULL,
+        amount INTEGER NOT NULL
+      );
+      INSERT INTO accounts (id, name, category) VALUES (1, '現金', 'asset'), (2, '資本金', 'equity');
+      INSERT INTO journal_entries (id, entry_date, description) VALUES (1, '2026-04-01', '移行前の仕訳');
+      INSERT INTO journal_lines (id, journal_entry_id, account_id, side, amount) VALUES
+        (1, 1, 1, 'debit', 100), (2, 1, 2, 'credit', 100);
+    `);
+    legacy.close();
+
+    repository = new SqliteAccountingRepository(databasePath);
+    await repository.initialize();
+    expect(await repository.getJournal(1)).toMatchObject({
+      description: "移行前の仕訳",
+      lines: [{ accountId: 1, side: "debit", amount: 100 }, { accountId: 2, side: "credit", amount: 100 }],
+    });
+
+    const subaccount = await repository.createSubaccount(1, "小口現金");
+    if (!subaccount) throw new Error("補助科目を作成できませんでした。");
+    const migratedJournal = await repository.createJournal({
+      date: "2026-04-02",
+      description: "移行後の仕訳",
+      lines: [
+        { accountId: 1, subaccountId: subaccount.id, side: "debit", amount: 200 },
+        { accountId: 2, side: "credit", amount: 200 },
+      ],
+    });
+    expect(migratedJournal.lines[0]).toMatchObject({ subaccountId: subaccount.id });
   });
 });

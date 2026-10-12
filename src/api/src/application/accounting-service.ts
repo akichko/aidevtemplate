@@ -84,8 +84,12 @@ export class AccountingService {
     const value = asObject(input) as unknown as JournalInput;
     validateJournalInput(value);
     for (const line of value.lines) {
-      if (!(await this.repository.getAccount(line.accountId))) {
+      const account = await this.repository.getAccount(line.accountId);
+      if (!account) {
         throw new DomainError("仕訳明細の勘定科目が見つかりません。", "INVALID_ACCOUNT_ID");
+      }
+      if (line.subaccountId !== undefined && !account.subaccounts.some((subaccount) => subaccount.id === line.subaccountId)) {
+        throw new DomainError("補助科目が選択した勘定科目に属していません。", "INVALID_SUBACCOUNT_ID");
       }
     }
     return this.repository.createJournal(value);
@@ -95,8 +99,12 @@ export class AccountingService {
     const value = asObject(input) as unknown as JournalInput;
     validateJournalInput(value);
     for (const line of value.lines) {
-      if (!(await this.repository.getAccount(line.accountId))) {
+      const account = await this.repository.getAccount(line.accountId);
+      if (!account) {
         throw new DomainError("仕訳明細の勘定科目が見つかりません。", "INVALID_ACCOUNT_ID");
+      }
+      if (line.subaccountId !== undefined && !account.subaccounts.some((subaccount) => subaccount.id === line.subaccountId)) {
+        throw new DomainError("補助科目が選択した勘定科目に属していません。", "INVALID_SUBACCOUNT_ID");
       }
     }
     const journal = await this.repository.updateJournal(journalId, value);

@@ -321,6 +321,9 @@ components:
       properties:
         accountId:
           type: integer
+        subaccountId:
+          type: integer
+          description: 指定する場合はaccountIdに紐づく補助科目のID。省略時は補助科目なし。
         side:
           type: string
           enum: [debit, credit]

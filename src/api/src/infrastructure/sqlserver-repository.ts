@@ -34,6 +34,7 @@ interface JournalLineRow {
   id: number;
   journalEntryId: number;
   accountId: number;
+  subaccountId: number | null;
   side: "debit" | "credit";
   amount: number;
 }
@@ -74,6 +75,8 @@ export class SqlServerAccountingRepository implements AccountingRepository {
           account_id BIGINT NOT NULL REFERENCES dbo.accounts(id),
           name NVARCHAR(MAX) NOT NULL
         );
+      IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ux_subaccounts_account_id_id' AND object_id = OBJECT_ID('dbo.subaccounts'))
+        CREATE UNIQUE INDEX ux_subaccounts_account_id_id ON dbo.subaccounts(account_id, id);
       IF OBJECT_ID(N'dbo.journal_entries', N'U') IS NULL
         CREATE TABLE dbo.journal_entries (
           id BIGINT IDENTITY(1,1) PRIMARY KEY,
@@ -86,9 +89,17 @@ export class SqlServerAccountingRepository implements AccountingRepository {
           id BIGINT IDENTITY(1,1) PRIMARY KEY,
           journal_entry_id BIGINT NOT NULL REFERENCES dbo.journal_entries(id),
           account_id BIGINT NOT NULL REFERENCES dbo.accounts(id),
+          subaccount_id BIGINT NULL,
           side NVARCHAR(10) NOT NULL CHECK (side IN ('debit', 'credit')),
-          amount BIGINT NOT NULL CHECK (amount > 0)
+          amount BIGINT NOT NULL CHECK (amount > 0),
+          CONSTRAINT fk_journal_lines_subaccounts FOREIGN KEY (account_id, subaccount_id)
+            REFERENCES dbo.subaccounts(account_id, id)
         );
+      IF COL_LENGTH(N'dbo.journal_lines', N'subaccount_id') IS NULL
+        ALTER TABLE dbo.journal_lines ADD subaccount_id BIGINT NULL;
+      IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'fk_journal_lines_subaccounts' AND parent_object_id = OBJECT_ID('dbo.journal_lines'))
+        ALTER TABLE dbo.journal_lines WITH CHECK ADD CONSTRAINT fk_journal_lines_subaccounts
+          FOREIGN KEY (account_id, subaccount_id) REFERENCES dbo.subaccounts(account_id, id);
       IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ix_journal_entries_date' AND object_id = OBJECT_ID('dbo.journal_entries'))
         CREATE INDEX ix_journal_entries_date ON dbo.journal_entries(entry_date);
       IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'ix_journal_lines_account' AND object_id = OBJECT_ID('dbo.journal_lines'))
@@ -172,7 +183,7 @@ export class SqlServerAccountingRepository implements AccountingRepository {
     const headerRequest = this.connection().request();
     const lineRequest = this.connection().request();
     let headerQuery = "SELECT id, entry_date AS entryDate, description FROM dbo.journal_entries";
-    let lineQuery = "SELECT id, journal_entry_id AS journalEntryId, account_id AS accountId, side, amount FROM dbo.journal_lines";
+    let lineQuery = "SELECT id, journal_entry_id AS journalEntryId, account_id AS accountId, subaccount_id AS subaccountId, side, amount FROM dbo.journal_lines";
     if (range) {
       headerRequest.input("startDate", sql.Date, range.startDate).input("endDate", sql.Date, range.endDate);
       lineRequest.input("startDate", sql.Date, range.startDate).input("endDate", sql.Date, range.endDate);
@@ -194,7 +205,7 @@ export class SqlServerAccountingRepository implements AccountingRepository {
     const row = header.recordset[0];
     if (!row) return null;
     const lines = await this.connection().request().input("id", sql.BigInt, journalId)
-      .query<JournalLineRow>("SELECT id, journal_entry_id AS journalEntryId, account_id AS accountId, side, amount FROM dbo.journal_lines WHERE journal_entry_id = @id ORDER BY id");
+      .query<JournalLineRow>("SELECT id, journal_entry_id AS journalEntryId, account_id AS accountId, subaccount_id AS subaccountId, side, amount FROM dbo.journal_lines WHERE journal_entry_id = @id ORDER BY id");
     return mapJournal(row, lines.recordset);
   }
 
@@ -211,9 +222,10 @@ export class SqlServerAccountingRepository implements AccountingRepository {
         await new sql.Request(transaction)
           .input("entryId", sql.BigInt, id)
           .input("accountId", sql.BigInt, line.accountId)
+          .input("subaccountId", sql.BigInt, line.subaccountId ?? null)
           .input("side", sql.NVarChar(10), line.side)
           .input("amount", sql.BigInt, line.amount)
-          .query("INSERT INTO dbo.journal_lines (journal_entry_id, account_id, side, amount) VALUES (@entryId, @accountId, @side, @amount)");
+          .query("INSERT INTO dbo.journal_lines (journal_entry_id, account_id, subaccount_id, side, amount) VALUES (@entryId, @accountId, @subaccountId, @side, @amount)");
       }
       await transaction.commit();
       return (await this.getJournal(id))!;
@@ -242,9 +254,10 @@ export class SqlServerAccountingRepository implements AccountingRepository {
         await new sql.Request(transaction)
           .input("entryId", sql.BigInt, journalId)
           .input("accountId", sql.BigInt, line.accountId)
+          .input("subaccountId", sql.BigInt, line.subaccountId ?? null)
           .input("side", sql.NVarChar(10), line.side)
           .input("amount", sql.BigInt, line.amount)
-          .query("INSERT INTO dbo.journal_lines (journal_entry_id, account_id, side, amount) VALUES (@entryId, @accountId, @side, @amount)");
+          .query("INSERT INTO dbo.journal_lines (journal_entry_id, account_id, subaccount_id, side, amount) VALUES (@entryId, @accountId, @subaccountId, @side, @amount)");
       }
       await transaction.commit();
       return this.getJournal(journalId);
@@ -291,7 +304,12 @@ function mapSubaccount(row: SubaccountRow): Subaccount {
 }
 
 function mapJournal(header: JournalRow, rows: JournalLineRow[]): Journal {
-  const lines = rows.map((row) => ({ accountId: Number(row.accountId), side: row.side, amount: Number(row.amount) }));
+  const lines = rows.map((row) => ({
+    accountId: Number(row.accountId),
+    ...(row.subaccountId === null ? {} : { subaccountId: Number(row.subaccountId) }),
+    side: row.side,
+    amount: Number(row.amount),
+  }));
   return {
     id: Number(header.id),
     date: header.entryDate instanceof Date ? header.entryDate.toISOString().slice(0, 10) : String(header.entryDate).slice(0, 10),
